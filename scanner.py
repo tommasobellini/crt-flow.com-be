@@ -21,9 +21,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 2. CARICAMENTO VARIABILI D'AMBIENTE
-load_dotenv(
-    ".env.local"
-)
+# Carica .env.local solo se esiste (sviluppo locale)
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local")
+    logger.info("Caricate variabili da .env.local")
+else:
+    logger.info("File .env.local non trovato, utilizzo variabili d'ambiente di sistema")
 
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 
