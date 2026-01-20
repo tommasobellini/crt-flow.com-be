@@ -9631,3 +9631,42 @@
 2026-01-20 23:51:51,106 - INFO - Segnale SCADUTO per HST (1M): STOPPED
 2026-01-20 23:51:51,106 - INFO - Segnale SCADUTO per HST (1D): STOPPED
 2026-01-20 23:51:51,107 - INFO - MATCH BEARISH: HST su 1M
+2026-01-20 23:54:53,926 - INFO - https://sfvtnsutlaoqkvozcoqu.supabase.co
+2026-01-20 23:54:53,927 - INFO - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmdnRuc3V0bGFvcWt2b3pjb3F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODY1MDY1MywiZXhwIjoyMDg0MjI2NjUzfQ.4wwT9ZHoyqIyiIflnJ23jsGojcdwXBNPYXRqT_YXGVg
+2026-01-20 23:54:54,903 - INFO - Inizio scansione CRTFlow...
+2026-01-20 23:54:55,432 - INFO - Market Bias SPY: BEARISH (Price: 677.58, SMA20: nan)
+2026-01-20 23:54:55,436 - INFO - Market Bias QQQ: BEARISH (Price: 608.06, SMA20: nan)
+2026-01-20 23:54:55,438 - INFO - Global Market Bias: BEARISH
+2026-01-20 23:54:56,042 - INFO - HTTP Request: DELETE https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals?symbol=eq._MARKET_STATUS_ "HTTP/2 200 OK"
+2026-01-20 23:54:56,139 - INFO - HTTP Request: POST https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals "HTTP/2 201 Created"
+2026-01-20 23:54:56,258 - INFO - HTTP Request: GET https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals?select=%2A&is_active=eq.True "HTTP/2 200 OK"
+2026-01-20 23:54:56,321 - INFO - Caricati 721 segnali attivi per validazione.
+2026-01-20 23:54:57,047 - INFO - Ottenuti 503 ticker S&P 500.
+2026-01-20 23:54:57,775 - INFO - Ottenuti 101 ticker NASDAQ 100.
+2026-01-20 23:54:57,777 - WARNING - Scraping Russell 1000 non implementato (fonte instabile). Uso solo S&P 500 + NASDAQ 100.
+2026-01-20 23:54:57,777 - INFO - Totale Ticker unici da analizzare: 518
+2026-01-20 23:54:57,777 - INFO - Elaborazione blocco 1 (50 ticker)...
+2026-01-20 23:54:59,936 - INFO - Segnale SCADUTO per COF (1M): STOPPED
+2026-01-20 23:54:59,937 - INFO - MATCH BEARISH: COF su 1M
+2026-01-20 23:55:00,475 - INFO - Telegram alert inviato per COF
+2026-01-20 23:55:00,478 - INFO - Segnale SCADUTO per PRU (1M): STOPPED
+2026-01-20 23:55:00,481 - INFO - MATCH BEARISH: PRU su 1M
+2026-01-20 23:55:01,191 - INFO - Telegram alert inviato per PRU
+2026-01-20 23:55:01,196 - INFO - Segnale SCADUTO per AVB (1M): STOPPED
+2026-01-20 23:55:01,196 - INFO - Segnale SCADUTO per AVB (1D): STOPPED
+2026-01-20 23:55:01,198 - INFO - MATCH BEARISH: AVB su 1M
+2026-01-20 23:55:01,959 - INFO - Telegram alert inviato per AVB
+2026-01-20 23:55:01,965 - INFO - Segnale SCADUTO per BALL (1H): STOPPED
+2026-01-20 23:55:01,965 - INFO - Segnale SCADUTO per BALL (4H): STOPPED
+2026-01-20 23:55:01,968 - INFO - Segnale SCADUTO per QCOM (1M): PROFIT
+2026-01-20 23:55:01,969 - INFO - Segnale SCADUTO per QCOM (1H): STOPPED
+2026-01-20 23:55:01,970 - INFO - Segnale SCADUTO per QCOM (4H): STOPPED
+2026-01-20 23:55:01,970 - INFO - MATCH BEARISH: QCOM su 1M
+2026-01-20 23:55:02,759 - INFO - Telegram alert inviato per QCOM
+2026-01-20 23:55:02,767 - INFO - Segnale SCADUTO per AZO (1M): STOPPED
+2026-01-20 23:55:02,777 - INFO - Segnale SCADUTO per AZO (1H): STOPPED
+2026-01-20 23:55:02,788 - INFO - Segnale SCADUTO per AZO (4H): STOPPED
+2026-01-20 23:55:02,790 - INFO - MATCH BULLISH: AZO su 1M
+2026-01-20 23:55:02,791 - INFO - Telegram alert SKIPPED for AZO (Score: 70/100 - Too Low)
+2026-01-20 23:55:02,795 - INFO - Segnale SCADUTO per AKAM (1M): STOPPED
+2026-01-20 23:55:02,809 - INFO - MATCH BEARISH: AKAM su 1M
