@@ -272,11 +272,13 @@ def validate_existing_signals(ticker, df, active_signals_map):
                 reason = "PROFIT"
         
         if should_expire:
+            result_code = 'TP_HIT' if reason == 'PROFIT' else 'SL_HIT' if reason == 'STOPPED' else 'MANUAL_CLOSE'
+            
             logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason}")
             updates.append({
                 "id": sig['id'],
                 "is_active": False,
-                # "result": reason # Potremmo aggiungere una colonna 'result' al DB in futuro per statistiche
+                "result": result_code
             })
 
     return updates
