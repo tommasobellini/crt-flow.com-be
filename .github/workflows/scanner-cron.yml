@@ -1,4 +1,4 @@
-name: CRTFlow Daily Scanner
+name: CRT Flow Daily Scanner
 
 on:
   schedule:

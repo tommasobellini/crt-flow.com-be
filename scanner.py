@@ -124,6 +124,60 @@ def get_session_tag(timestamp):
         pass
     return 'None'
 
+def calculate_atr(df, period=14):
+    try:
+        high = df['High']
+        low = df['Low']
+        close = df['Close'].shift(1)
+        
+        tr1 = high - low
+        tr2 = (high - close).abs()
+        tr3 = (low - close).abs()
+        
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(window=period).mean().iloc[-1]
+        return atr
+    except:
+        return 0
+
+def get_wick_analysis(candle, type_direction, atr):
+    """
+    Analizza la wick in base alla logica Wyckoff (Effort is Result).
+    Returns: (is_golden, is_volatile, wick_ratio)
+    """
+    try:
+        full_range = float(candle['High']) - float(candle['Low'])
+        if full_range == 0: return False, False, 0
+        
+        open_p = float(candle['Open'])
+        close_p = float(candle['Close'])
+        high_p = float(candle['High'])
+        low_p = float(candle['Low'])
+        
+        wick_len = 0
+        if type_direction == 'bullish':
+            # Lower Wick
+            body_bottom = min(open_p, close_p)
+            wick_len = body_bottom - low_p
+        else:
+            # Upper Wick
+            body_top = max(open_p, close_p)
+            wick_len = high_p - body_top
+            
+        wick_ratio = wick_len / full_range
+        
+        # Wyckoff Logic
+        # 1. Extreme Wick (> 70% range OR > 1.5x ATR)
+        is_volatile = (wick_ratio > 0.70) or (atr > 0 and wick_len > 1.5 * atr)
+        
+        # 2. Golden Wick (30% - 50%) AND Controlled Energy (< 0.8x ATR approx?? User said ~0.5)
+        # Relaxed check: just ratio 0.3-0.5 and not volatile
+        is_golden = (0.30 <= wick_ratio <= 0.50) and not is_volatile
+        
+        return bool(is_golden), bool(is_volatile), wick_ratio
+    except:
+        return False, False, 0
+
 def detect_crt_logic(ticker, df, tf):
     if df is None or len(df) < 5:
         return None
@@ -147,7 +201,106 @@ def detect_crt_logic(ticker, df, tf):
         tier = 'Major' if tf in ['1M', '1W'] else 'Minor'
         session = get_session_tag(curr_candle.name) if hasattr(curr_candle, 'name') else 'None'
         
-        # Bullish CRT
+        # Calculate ATR for Volatility Checks
+        current_atr = calculate_atr(df)
+
+        # --- NEW: PERFECT RECLAIM (Equilibrium Reversal) ---
+        # Logic:
+        # 1. Identify 3 candles: Pre-Sweep (-3), Sweep (-2), Reclaim (-1/Current)
+        # 2. Check if Sweep Candle (-2) actually swept Pre-Sweep (-3) range but REJECTED (High/Low)
+        # 3. Check if Current Candle (-1) closes "perfectly" at Pre-Sweep (-3) close level
+        
+        try:
+            c0 = df.iloc[-1] # Current / Reclaim
+            c1 = df.iloc[-2] # Sweep Candle (This implies the wick analysis should run on C1)
+            c2 = df.iloc[-3] # Base / Pre-Sweep
+            
+            c0_close = float(c0['Close'])
+            c2_close = float(c2['Close'])
+            
+            # Condition 1: Perfect Alignment (0.03% tolerance)
+            price_delta = abs(c0_close - c2_close)
+            threshold = c0.Close * 0.0003 
+            is_perfect_reclaim = price_delta < threshold
+            
+            if is_perfect_reclaim:
+                # Condition 2: Check if c1 was a valid Sweep (Bullish or Bearish)
+                c1_low = float(c1['Low'])
+                c1_high = float(c1['High'])
+                c2_low = float(c2['Low'])
+                c2_high = float(c2['High'])
+                
+                # Was it a Bullish Sweep? (c1 low < c2 low)
+                was_bullish_sweep = c1_low < c2_low
+                # Was it a Bearish Sweep? (c1 high > c2 high)
+                was_bearish_sweep = c1_high > c2_high
+                
+                if was_bullish_sweep:
+                    logger.info(f"MATCH EQUILIBRIUM (BULLISH): {ticker} su {tf}")
+                    sl = c1_low
+                    tp = float(c2['High']) # Target range high
+                    risk = c0_close - sl
+                    reward = tp - c0_close
+                    rr = round(reward / risk, 2) if risk > 0 else 0
+                    
+                    # Analyze Wick on C1 (The Sweep Candle)
+                    is_golden, is_volatile, _ = get_wick_analysis(c1, 'bullish', current_atr)
+
+                    return {
+                        "symbol": ticker,
+                        "timeframe": tf,
+                        "type": "equilibrium_reversal", # Special Type
+                        "subtype": "bullish",
+                        "range_high": float(c2['High']),
+                        "range_low": c1_low,
+                        "price": c0_close,
+                        "is_active": True,
+                        "stop_loss": round(sl, 2),
+                        "take_profit": round(tp, 2),
+                        "rr_ratio": rr,
+                        "liquidity_tier": tier,
+                        "session_tag": session,
+                        "fvg_detected": False,
+                        "smt_divergence": False,
+                        "volatility_warning": is_volatile,
+                        "is_golden_wick": is_golden
+                    }
+                
+                elif was_bearish_sweep:
+                    logger.info(f"MATCH EQUILIBRIUM (BEARISH): {ticker} su {tf}")
+                    sl = c1_high
+                    tp = float(c2['Low'])
+                    risk = sl - c0_close
+                    reward = c0_close - tp
+                    rr = round(reward / risk, 2) if risk > 0 else 0
+                    
+                    # Analyze Wick on C1 (The Sweep Candle)
+                    is_golden, is_volatile, _ = get_wick_analysis(c1, 'bearish', current_atr)
+                    
+                    return {
+                        "symbol": ticker,
+                        "timeframe": tf,
+                        "type": "equilibrium_reversal",
+                        "subtype": "bearish",
+                        "range_high": c1_high,
+                        "range_low": float(c2['Low']),
+                        "price": c0_close,
+                        "is_active": True,
+                        "stop_loss": round(sl, 2),
+                        "take_profit": round(tp, 2),
+                        "rr_ratio": rr,
+                        "liquidity_tier": tier,
+                        "session_tag": session,
+                        "fvg_detected": False,
+                        "smt_divergence": False,
+                        "volatility_warning": is_volatile,
+                        "is_golden_wick": is_golden
+                    }
+        except Exception as e:
+            # Fallback if index error or other math issue
+            pass
+
+        # Bullish CRT (Standard)
         if c_low < p_low and c_close > p_low:
             logger.info(f"MATCH BULLISH: {ticker} su {tf}")
             sl = c_low
@@ -155,6 +308,9 @@ def detect_crt_logic(ticker, df, tf):
             risk = c_close - sl
             reward = tp - c_close
             rr = round(reward / risk, 2) if risk > 0 else 0
+            
+            # Analyze Wick on C0 (Current Sweep Candle)
+            is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bullish', current_atr)
             
             return {
                 "symbol": ticker,
@@ -170,7 +326,9 @@ def detect_crt_logic(ticker, df, tf):
                 "liquidity_tier": tier,
                 "session_tag": session,
                 "fvg_detected": False,
-                "smt_divergence": False
+                "smt_divergence": False,
+                "volatility_warning": is_volatile,
+                "is_golden_wick": is_golden
             }
 
         # Bearish CRT
@@ -181,6 +339,9 @@ def detect_crt_logic(ticker, df, tf):
             risk = sl - c_close
             reward = c_close - tp
             rr = round(reward / risk, 2) if risk > 0 else 0
+            
+            # Analyze Wick on C0 (Current Sweep Candle)
+            is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bearish', current_atr)
 
             return {
                 "symbol": ticker,
@@ -196,7 +357,9 @@ def detect_crt_logic(ticker, df, tf):
                 "liquidity_tier": tier,
                 "session_tag": session,
                 "fvg_detected": False,
-                "smt_divergence": False
+                "smt_divergence": False,
+                "volatility_warning": is_volatile,
+                "is_golden_wick": is_golden
             }
     except Exception as e:
         logger.error(f"Errore calcolo CRT per {ticker} [{tf}]: {e}")
@@ -292,7 +455,7 @@ def main():
         except Exception:
             pass
 
-    logger.info("Inizio scansione CRTFlow...")
+    logger.info("Inizio scansione CRT Flow...")
     start_time = time.time()
     
     # 1. Analisi Bias di Mercato
