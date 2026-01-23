@@ -1,4 +1,15 @@
 import os
+import argparse
+import csv
+import logging
+import time
+import io
+import requests
+import yfinance as yf
+import pandas as pd
+from supabase import create_client, Client
+from dotenv import load_dotenv
+from notifications import send_telegram_alert
 import logging
 import time
 import io
@@ -43,6 +54,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # 3. CONFIGURAZIONE TIMEFRAME
 # Definiamo i periodi necessari per avere abbastanza candele per il calcolo
 TF_CONFIG = {
+    "3M": {"period": "10y", "interval": "3mo"}, # Base for Quarterly & Yearly
     "1M": {"period": "2y", "interval": "1mo"},
     "1W": {"period": "1y", "interval": "1wk"},
     "1D": {"period": "6mo", "interval": "1d"},
@@ -101,12 +113,32 @@ def get_nasdaq100_tickers():
         logger.error(f"Errore nel recupero ticker NASDAQ 100: {e}")
         return []
 
-def get_russell1000_tickers():
-    """Tenta di recuperare una lista Russell 1000 (approssimata da file statico o ETF se possibile)."""
-    # Nota: Non esiste una fonte Wikipedia stabile e pulita per Russell 1000 come per S&P 500.
-    # Per ora ritorniamo lista vuota per evitare errori, o in futuro implementare scraping di ETF IWB.
-    logger.warning("Scraping Russell 1000 non implementato (fonte instabile). Uso solo S&P 500 + NASDAQ 100.")
-    return []
+def get_russell2000_tickers():
+    """Recupera la lista Russell 2000 dal file CSV locale (IWM_holdings.csv)."""
+    try:
+        csv_path = os.path.join(os.path.dirname(__file__), 'IWM_holdings.csv')
+        if not os.path.exists(csv_path): 
+            logger.warning("File IWM_holdings.csv non trovato.")
+            return []
+            
+        tickers = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            # Skip first 9 lines (metadata)
+            for _ in range(9):
+                next(f, None)
+            
+            reader = csv.DictReader(f)
+            for row in reader:
+                val = row.get('Ticker')
+                if val and val.strip() and val != '-':
+                    # Clean ticker (e.g. BRK.B -> BRK-B)
+                    tickers.append(val.strip().replace('.', '-'))
+                    
+        logger.info(f"Ottenuti {len(tickers)} ticker Russell 2000.")
+        return tickers
+    except Exception as e:
+        logger.error(f"Errore lettura Russell 2000 CSV: {e}")
+        return []
 
 def get_session_tag(timestamp):
     # Timestamp assumed UTC or tz-naive (from yfinance)
@@ -499,12 +531,34 @@ def main():
         logger.error(f"Errore fetch segnali attivi: {e}")
         active_signals_map = {}
 
-    tickers_sp500 = get_sp500_tickers()
-    tickers_nasdaq = get_nasdaq100_tickers()
-    tickers_russell = get_russell1000_tickers()
+    # --- ARGUMENT PARSING ---
+    parser = argparse.ArgumentParser(description='CRT Flow Scanner')
+    parser.add_argument('--all', action='store_true', help='Scan ALL indices')
+    parser.add_argument('--sp500', action='store_true', help='Scan S&P 500')
+    parser.add_argument('--nasdaq', action='store_true', help='Scan NASDAQ 100')
+    parser.add_argument('--russell', action='store_true', help='Scan Russell 2000')
+    args = parser.parse_args()
+
+    scan_sp = args.sp500 or args.all
+    scan_ndx = args.nasdaq or args.all
+    scan_russell = args.russell or args.all
+
+    # Default behavior if NO args are passed: Scan SP + NDX (Standard)
+    if not (scan_sp or scan_ndx or scan_russell):
+        logger.info("Nessun argomento specificato. Default: S&P 500 + NASDAQ 100.")
+        scan_sp = True
+        scan_ndx = True
+    
+    all_tickers = []
+    if scan_sp: 
+        all_tickers += get_sp500_tickers()
+    if scan_ndx: 
+        all_tickers += get_nasdaq100_tickers()
+    if scan_russell: 
+        all_tickers += get_russell2000_tickers()
 
     # Unione liste e rimozione duplicati
-    tickers = list(set(tickers_sp500 + tickers_nasdaq + tickers_russell))
+    tickers = list(set(all_tickers))
     logger.info(f"Totale Ticker unici da analizzare: {len(tickers)}")
     chunk_size = 50 # Processiamo 50 ticker alla volta
     
@@ -547,6 +601,15 @@ def main():
                     df = df.dropna()
                     if df.empty: continue
                     
+                    # FILTRO PENNY STOCK (Obbligatorio)
+                    # Se il prezzo attuale (ultima Close) è < 5.00, salta perchè è "spazzatura"
+                    try:
+                        current_close = float(df['Close'].iloc[-1])
+                        if current_close < 5.00:
+                            continue
+                    except:
+                        pass
+
                     # A. Validazione Segnali Esistenti (Solo su 1D o timeframe corrente appropriato)
                     # Per semplicità validiamo ogni volta che abbiamo dati freschi
                     updates = validate_existing_signals(ticker, df, active_signals_map)
@@ -584,6 +647,21 @@ def main():
                                  if sig_4h['rr_ratio'] >= 2.0:
                                      send_telegram_alert(sig_4h, market_bias)
                                  all_detected_signals.append(sig_4h)
+                        except Exception as e:
+                           pass
+
+                    # 3. Resample 3M -> 12M (Yearly / God View)
+                    if tf == "3M" and not df.empty:
+                        try:
+                            # Resample to Yearly (YE = Year End)
+                            df_12m = df.resample('YE').agg({
+                                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
+                            }).dropna()
+                            sig_12m = detect_crt_logic(ticker, df_12m, "12M")
+                            if sig_12m: 
+                                 # Always Trend/Alert for Yearly (God View)
+                                 send_telegram_alert(sig_12m, market_bias)
+                                 all_detected_signals.append(sig_12m)
                         except Exception as e:
                            pass
 
