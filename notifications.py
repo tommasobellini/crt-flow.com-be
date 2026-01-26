@@ -86,12 +86,12 @@ def send_telegram_alert(signal, market_bias='NEUTRAL'):
         "parse_mode": "Markdown",
         "disable_web_page_preview": True
     }
-
-    try:
-        resp = requests.post(url, json=payload, timeout=5)
-        if resp.status_code != 200:
-            logger.error(f"Errore invio Telegram: {resp.text}")
-        else:
-            logger.info(f"Telegram alert inviato per {symbol}")
-    except Exception as e:
-        logger.error(f"Eccezione invio Telegram: {e}")
+    # TODO: disabled for the moment
+    # try:
+    #     resp = requests.post(url, json=payload, timeout=5)
+    #     if resp.status_code != 200:
+    #         logger.error(f"Errore invio Telegram: {resp.text}")
+    #     else:
+    #         logger.info(f"Telegram alert inviato per {symbol}")
+    # except Exception as e:
+    #     logger.error(f"Eccezione invio Telegram: {e}")
