@@ -37963,3 +37963,130 @@ THE ISHARES FUNDS ARE NOT SPONSORED, ENDORSED, ISSUED, SOLD OR PROMOTED BY BLOOM
 2026-01-23 05:57:57,531 - INFO - HTTP Request: POST https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals?columns=%22symbol%22%2C%22volatility_warning%22%2C%22range_low%22%2C%22is_active%22%2C%22range_high%22%2C%22fvg_detected%22%2C%22is_golden_wick%22%2C%22subtype%22%2C%22price%22%2C%22rr_ratio%22%2C%22timeframe%22%2C%22type%22%2C%22stop_loss%22%2C%22liquidity_tier%22%2C%22take_profit%22%2C%22session_tag%22%2C%22smt_divergence%22 "HTTP/2 201 Created"
 2026-01-23 05:57:57,576 - INFO - Database aggiornato con successo.
 2026-01-23 05:57:57,576 - INFO - Scansione completata in 1416.69 secondi.
+2026-01-26 19:13:18,284 - INFO - Caricate variabili da .env.local
+2026-01-26 19:13:18,285 - INFO - https://sfvtnsutlaoqkvozcoqu.supabase.co
+2026-01-26 19:13:18,285 - INFO - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmdnRuc3V0bGFvcWt2b3pjb3F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODY1MDY1MywiZXhwIjoyMDg0MjI2NjUzfQ.4wwT9ZHoyqIyiIflnJ23jsGojcdwXBNPYXRqT_YXGVg
+2026-01-26 19:13:19,102 - INFO - Inizio scansione CRT Flow...
+2026-01-26 19:13:23,903 - INFO - Market Bias SPY: BULLISH (Price: 693.08, SMA20: 689.02)
+2026-01-26 19:13:23,905 - INFO - Market Bias QQQ: BULLISH (Price: 626.45, SMA20: 620.72)
+2026-01-26 19:13:23,906 - INFO - Global Market Bias: BULLISH
+2026-01-26 19:13:25,027 - INFO - HTTP Request: DELETE https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals?symbol=eq._MARKET_STATUS_ "HTTP/2 200 OK"
+2026-01-26 19:13:25,169 - INFO - HTTP Request: POST https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals "HTTP/2 201 Created"
+2026-01-26 19:13:25,394 - INFO - HTTP Request: GET https://sfvtnsutlaoqkvozcoqu.supabase.co/rest/v1/crt_signals?select=%2A&is_active=eq.True "HTTP/2 200 OK"
+2026-01-26 19:13:25,492 - INFO - Caricati 1000 segnali attivi per validazione.
+2026-01-26 19:13:26,766 - INFO - Ottenuti 503 ticker S&P 500.
+2026-01-26 19:13:28,085 - INFO - Ottenuti 101 ticker NASDAQ 100.
+2026-01-26 19:13:28,124 - INFO - Ottenuti 1955 ticker Russell 2000.
+2026-01-26 19:13:28,125 - INFO - Totale Ticker unici da analizzare: 2471
+2026-01-26 19:13:28,126 - INFO - Elaborazione blocco 1 (50 ticker)...
+2026-01-26 19:13:28,465 - ERROR - $CRDA: possibly delisted; no price data found  (period=10y)
+2026-01-26 19:13:29,516 - ERROR - 
+1 Failed download:
+2026-01-26 19:13:29,517 - ERROR - ['CRDA']: possibly delisted; no price data found  (period=10y)
+2026-01-26 19:13:29,577 - INFO - MATCH BEARISH: EBS su 3M
+2026-01-26 19:13:29,586 - INFO - MATCH BEARISH: EBS su 12M
+2026-01-26 19:13:29,586 - INFO - Telegram alert SKIPPED for EBS (Score: 60/100 - Too Low)
+2026-01-26 19:13:29,603 - INFO - Segnale SCADUTO per HUBB (1D): STOPPED
+2026-01-26 19:13:29,616 - INFO - MATCH BEARISH: FRME su 3M
+2026-01-26 19:13:29,626 - INFO - Segnale SCADUTO per HRL (1W): STOPPED
+2026-01-26 19:13:29,650 - INFO - MATCH BULLISH: REFI su 12M
+2026-01-26 19:13:29,650 - INFO - Telegram alert SKIPPED for REFI (Score: 70/100 - Too Low)
+2026-01-26 19:13:29,696 - INFO - MATCH BULLISH: METC su 3M
+2026-01-26 19:13:29,719 - INFO - MATCH BULLISH: METC su 12M
+2026-01-26 19:13:29,723 - INFO - Telegram alert SKIPPED for METC (Score: 70/100 - Too Low)
+2026-01-26 19:13:29,761 - INFO - MATCH BULLISH: AVO su 3M
+2026-01-26 19:13:29,785 - INFO - Segnale SCADUTO per WYNN (3M): STOPPED
+2026-01-26 19:13:29,786 - INFO - Segnale SCADUTO per WYNN (1W): STOPPED
+2026-01-26 19:13:29,790 - INFO - MATCH BULLISH: WYNN su 3M
+2026-01-26 19:13:29,856 - INFO - MATCH BEARISH: AMPH su 3M
+2026-01-26 19:13:29,883 - INFO - MATCH BEARISH: NOVT su 3M
+2026-01-26 19:13:29,908 - INFO - Segnale SCADUTO per MMM (1H): STOPPED
+2026-01-26 19:13:30,034 - INFO - MATCH BEARISH: AEO su 3M
+2026-01-26 19:13:30,051 - INFO - MATCH BEARISH: AEO su 12M
+2026-01-26 19:13:30,054 - INFO - Telegram alert SKIPPED for AEO (Score: 60/100 - Too Low)
+2026-01-26 19:13:30,073 - INFO - MATCH BULLISH: ASAN su 12M
+2026-01-26 19:13:30,828 - INFO - Telegram alert inviato per ASAN
+2026-01-26 19:13:30,844 - INFO - MATCH BULLISH: BPRN su 12M
+2026-01-26 19:13:30,845 - INFO - Telegram alert SKIPPED for BPRN (Score: 70/100 - Too Low)
+2026-01-26 19:13:30,847 - INFO - Segnale SCADUTO per XOM (1D): STOPPED
+2026-01-26 19:13:30,847 - INFO - Segnale SCADUTO per XOM (1H): STOPPED
+2026-01-26 19:13:30,904 - INFO - MATCH BEARISH: MLYS su 3M
+2026-01-26 19:13:30,918 - INFO - MATCH BEARISH: FMBH su 3M
+2026-01-26 19:13:30,928 - INFO - MATCH BEARISH: FMBH su 12M
+2026-01-26 19:13:30,928 - INFO - Telegram alert SKIPPED for FMBH (Score: 60/100 - Too Low)
+2026-01-26 19:13:30,934 - INFO - MATCH BEARISH: RMR su 3M
+2026-01-26 19:13:30,973 - INFO - MATCH BULLISH: ESRT su 3M
+2026-01-26 19:13:30,981 - INFO - MATCH BULLISH: ESRT su 12M
+2026-01-26 19:13:31,576 - INFO - Telegram alert inviato per ESRT
+2026-01-26 19:13:31,901 - ERROR - $CRDA: possibly delisted; no price data found  (period=2y)
+2026-01-26 19:13:32,936 - ERROR - 
+1 Failed download:
+2026-01-26 19:13:32,936 - ERROR - ['CRDA']: possibly delisted; no price data found  (period=2y)
+2026-01-26 19:13:32,959 - INFO - MATCH BULLISH: EBS su 1M
+2026-01-26 19:13:33,379 - INFO - Telegram alert inviato per EBS
+2026-01-26 19:13:33,384 - INFO - MATCH BEARISH: MEC su 1M
+2026-01-26 19:13:33,385 - INFO - Telegram alert SKIPPED for MEC (Score: 70/100 - Too Low)
+2026-01-26 19:13:33,386 - INFO - Segnale SCADUTO per HUBB (1D): STOPPED
+2026-01-26 19:13:33,393 - INFO - MATCH BEARISH: FRME su 1M
+2026-01-26 19:13:33,394 - INFO - Telegram alert SKIPPED for FRME (Score: 70/100 - Too Low)
+2026-01-26 19:13:33,396 - INFO - Segnale SCADUTO per HRL (1W): STOPPED
+2026-01-26 19:13:33,398 - INFO - MATCH BULLISH: HRL su 1M
+2026-01-26 19:13:33,903 - INFO - Telegram alert inviato per HRL
+2026-01-26 19:13:33,913 - INFO - MATCH BEARISH: PI su 1M
+2026-01-26 19:13:33,914 - INFO - Telegram alert SKIPPED for PI (Score: 70/100 - Too Low)
+2026-01-26 19:13:33,927 - INFO - MATCH BEARISH: PBI su 1M
+2026-01-26 19:13:33,927 - INFO - Telegram alert SKIPPED for PBI (Score: 70/100 - Too Low)
+2026-01-26 19:13:33,931 - INFO - MATCH BULLISH: AVO su 1M
+2026-01-26 19:13:34,408 - INFO - Telegram alert inviato per AVO
+2026-01-26 19:13:34,413 - INFO - Segnale SCADUTO per WYNN (3M): STOPPED
+2026-01-26 19:13:34,414 - INFO - Segnale SCADUTO per WYNN (1W): STOPPED
+2026-01-26 19:13:34,431 - INFO - MATCH BEARISH: AMPH su 1M
+2026-01-26 19:13:34,432 - INFO - Telegram alert SKIPPED for AMPH (Score: 70/100 - Too Low)
+2026-01-26 19:13:34,438 - INFO - MATCH BULLISH: NOVT su 1M
+2026-01-26 19:13:37,925 - INFO - Telegram alert inviato per NOVT
+2026-01-26 19:13:37,928 - INFO - Segnale SCADUTO per MMM (1H): STOPPED
+2026-01-26 19:13:37,931 - INFO - MATCH BULLISH: MMM su 1M
+2026-01-26 19:13:38,435 - INFO - Telegram alert inviato per MMM
+2026-01-26 19:13:38,452 - INFO - MATCH BULLISH: SION su 1M
+2026-01-26 19:13:39,169 - INFO - Telegram alert inviato per SION
+2026-01-26 19:13:39,181 - INFO - MATCH BEARISH: AEO su 1M
+2026-01-26 19:13:39,183 - INFO - Telegram alert SKIPPED for AEO (Score: 70/100 - Too Low)
+2026-01-26 19:13:39,197 - INFO - Segnale SCADUTO per XOM (1D): STOPPED
+2026-01-26 19:13:39,198 - INFO - Segnale SCADUTO per XOM (1H): STOPPED
+2026-01-26 19:13:39,208 - INFO - MATCH BULLISH: SPOK su 1M
+2026-01-26 19:13:39,950 - INFO - Telegram alert inviato per SPOK
+2026-01-26 19:13:39,958 - INFO - MATCH BULLISH: IMMR su 1M
+2026-01-26 19:13:40,713 - INFO - Telegram alert inviato per IMMR
+2026-01-26 19:13:40,726 - INFO - MATCH BULLISH: CBNA su 1M
+2026-01-26 19:13:44,519 - INFO - Telegram alert inviato per CBNA
+2026-01-26 19:13:44,533 - INFO - MATCH BEARISH: FMBH su 1M
+2026-01-26 19:13:44,534 - INFO - Telegram alert SKIPPED for FMBH (Score: 70/100 - Too Low)
+2026-01-26 19:13:44,537 - INFO - MATCH BULLISH: RMR su 1M
+2026-01-26 19:13:45,368 - INFO - Telegram alert inviato per RMR
+2026-01-26 19:13:45,387 - INFO - MATCH BEARISH: WST su 1M
+2026-01-26 19:13:45,389 - INFO - Telegram alert SKIPPED for WST (Score: 70/100 - Too Low)
+2026-01-26 19:13:45,395 - INFO - MATCH BULLISH: ESRT su 1M
+2026-01-26 19:13:46,315 - INFO - Telegram alert inviato per ESRT
+2026-01-26 19:13:46,324 - INFO - MATCH BEARISH: CRMT su 1M
+2026-01-26 19:13:47,723 - INFO - Telegram alert inviato per CRMT
+2026-01-26 19:13:48,644 - ERROR - $CRDA: possibly delisted; no price data found  (period=1y)
+2026-01-26 19:13:50,047 - ERROR - 
+1 Failed download:
+2026-01-26 19:13:50,048 - ERROR - ['CRDA']: possibly delisted; no price data found  (period=1y)
+2026-01-26 19:13:50,126 - INFO - Segnale SCADUTO per HRL (1W): STOPPED
+2026-01-26 19:13:50,131 - INFO - MATCH BEARISH: HRL su 1W
+2026-01-26 19:13:50,132 - INFO - Telegram alert SKIPPED for HRL (Score: 70/100 - Too Low)
+2026-01-26 19:13:50,151 - INFO - MATCH BULLISH: TDAY su 1W
+2026-01-26 19:13:51,207 - INFO - Telegram alert inviato per TDAY
+2026-01-26 19:13:51,235 - INFO - MATCH BEARISH: METC su 1W
+2026-01-26 19:13:51,247 - INFO - Telegram alert SKIPPED for METC (Score: 70/100 - Too Low)
+2026-01-26 19:13:51,387 - INFO - Segnale SCADUTO per MMM (1H): STOPPED
+2026-01-26 19:13:51,437 - INFO - Segnale SCADUTO per XOM (1D): PROFIT
+2026-01-26 19:13:51,453 - INFO - Segnale SCADUTO per XOM (1H): PROFIT
+2026-01-26 19:13:51,485 - INFO - MATCH BEARISH: XOM su 1W
+2026-01-26 19:13:51,486 - INFO - Telegram alert SKIPPED for XOM (Score: 70/100 - Too Low)
+2026-01-26 19:13:51,566 - INFO - MATCH BEARISH: VRNS su 1W
+2026-01-26 19:13:52,379 - INFO - Telegram alert inviato per VRNS
+2026-01-26 19:13:52,545 - INFO - MATCH BEARISH: CMP su 1W
+2026-01-26 19:13:52,551 - INFO - Telegram alert SKIPPED for CMP (Score: 70/100 - Too Low)
+2026-01-26 19:13:53,038 - ERROR - $CRDA: possibly delisted; no price data found  (period=6mo)
