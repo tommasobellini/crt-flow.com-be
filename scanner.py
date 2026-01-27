@@ -210,14 +210,26 @@ def get_wick_analysis(candle, type_direction, atr):
     except:
         return False, False, 0
 
-def detect_crt_logic(ticker, df, tf):
+
+def detect_crt_logic(ticker, df, tf, config=None):
     if df is None or len(df) < 5:
         return None
+
+    # Default config if None
+    if config is None:
+        config = {"min_volume": 0, "rvol_threshold": 1.5}
 
     try:
         # Prendi le ultime due candele COMPLETATE
         prev_candle = df.iloc[-2]
         curr_candle = df.iloc[-1]
+        
+        # --- FILTRO 0: MIN VOLUME ---
+        curr_vol = float(curr_candle['Volume'])
+        if curr_vol < config["min_volume"]:
+             return None
+
+        # ... (rest of logic) ...
 
         p_high = float(prev_candle['High'])
         p_low = float(prev_candle['Low'])
@@ -235,13 +247,30 @@ def detect_crt_logic(ticker, df, tf):
         
         # Calculate ATR for Volatility Checks
         current_atr = calculate_atr(df)
+        
+        # --- NEW INDICATORS ---
+        # 1. RSI & Divergence
+        rsi_series = calculate_rsi(df['Close'])
+        
+        # 2. Volume Spike (Using Dynamic RVOL Threshold)
+        vol_sma = df['Volume'].rolling(window=20).mean().iloc[-1]
+        rel_vol = round(curr_vol / vol_sma, 2) if vol_sma > 0 else 0
+        
+        # --- FILTRO 1: RVOL (Relative Volume) ---
+        # Un Turtle Soup necessita di volume. Se bassa partecipazione, è un fakeout.
+        if curr_vol < (vol_sma * config["rvol_threshold"]):
+            # logger.debug(f"Scartato {ticker}: Low Volume (RVOL {rel_vol} < {config['rvol_threshold']})")
+            return None 
+
+        # --- FILTRO 2: KILLZONES (Timing) ---
+        valid_sessions = ['London', 'NY']
+        if tf in ['1H', '4H'] and session not in valid_sessions:
+             return None
+
+        # 3. ADR / Range Exhaustion
+        adr_pct = calculate_adr_percent(df)
 
         # --- NEW: PERFECT RECLAIM (Equilibrium Reversal) ---
-        # Logic:
-        # 1. Identify 3 candles: Pre-Sweep (-3), Sweep (-2), Reclaim (-1/Current)
-        # 2. Check if Sweep Candle (-2) actually swept Pre-Sweep (-3) range but REJECTED (High/Low)
-        # 3. Check if Current Candle (-1) closes "perfectly" at Pre-Sweep (-3) close level
-        
         try:
             c0 = df.iloc[-1] # Current / Reclaim
             c1 = df.iloc[-2] # Sweep Candle (This implies the wick analysis should run on C1)
@@ -268,7 +297,6 @@ def detect_crt_logic(ticker, df, tf):
                 was_bearish_sweep = c1_high > c2_high
                 
                 if was_bullish_sweep:
-                    logger.info(f"MATCH EQUILIBRIUM (BULLISH): {ticker} su {tf}")
                     sl = c1_low
                     tp = float(c2['High']) # Target range high
                     risk = c0_close - sl
@@ -277,6 +305,11 @@ def detect_crt_logic(ticker, df, tf):
                     
                     # Analyze Wick on C1 (The Sweep Candle)
                     is_golden, is_volatile, _ = get_wick_analysis(c1, 'bullish', current_atr)
+                    
+                    # Confluences
+                    has_div = check_divergence(df, rsi_series, 'bullish')
+                    hitting_fvg = detect_fvg_confluence(df, 'bullish')
+                    logger.info(f"MATCH EQUILIBRIUM (BULLISH): {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
 
                     return {
                         "symbol": ticker,
@@ -286,20 +319,25 @@ def detect_crt_logic(ticker, df, tf):
                         "range_high": float(c2['High']),
                         "range_low": c1_low,
                         "price": c0_close,
+                        "entry_price": c0_close, # Explicit Entry
+                        "result": "OPEN",
                         "is_active": True,
                         "stop_loss": round(sl, 2),
                         "take_profit": round(tp, 2),
                         "rr_ratio": rr,
                         "liquidity_tier": tier,
                         "session_tag": session,
-                        "fvg_detected": False,
-                        "smt_divergence": False,
+                        "fvg_detected": hitting_fvg, # Remapped
+                        "hitting_fvg": hitting_fvg, # New schema
+                        "has_divergence": has_div, # New schema
+                        "smt_divergence": has_div, # Legacy
+                        "adr_percent": adr_pct,
+                        "rel_volume": rel_vol,
                         "volatility_warning": is_volatile,
                         "is_golden_wick": is_golden
                     }
                 
                 elif was_bearish_sweep:
-                    logger.info(f"MATCH EQUILIBRIUM (BEARISH): {ticker} su {tf}")
                     sl = c1_high
                     tp = float(c2['Low'])
                     risk = sl - c0_close
@@ -309,6 +347,11 @@ def detect_crt_logic(ticker, df, tf):
                     # Analyze Wick on C1 (The Sweep Candle)
                     is_golden, is_volatile, _ = get_wick_analysis(c1, 'bearish', current_atr)
                     
+                    # Confluences
+                    has_div = check_divergence(df, rsi_series, 'bearish')
+                    hitting_fvg = detect_fvg_confluence(df, 'bearish')
+                    logger.info(f"MATCH EQUILIBRIUM (BEARISH): {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
+
                     return {
                         "symbol": ticker,
                         "timeframe": tf,
@@ -317,14 +360,20 @@ def detect_crt_logic(ticker, df, tf):
                         "range_high": c1_high,
                         "range_low": float(c2['Low']),
                         "price": c0_close,
+                        "entry_price": c0_close,
+                        "result": "OPEN",
                         "is_active": True,
                         "stop_loss": round(sl, 2),
                         "take_profit": round(tp, 2),
                         "rr_ratio": rr,
                         "liquidity_tier": tier,
                         "session_tag": session,
-                        "fvg_detected": False,
-                        "smt_divergence": False,
+                        "fvg_detected": hitting_fvg,
+                        "hitting_fvg": hitting_fvg,
+                        "has_divergence": has_div,
+                        "smt_divergence": has_div,
+                        "adr_percent": adr_pct,
+                        "rel_volume": rel_vol,
                         "volatility_warning": is_volatile,
                         "is_golden_wick": is_golden
                     }
@@ -334,7 +383,6 @@ def detect_crt_logic(ticker, df, tf):
 
         # Bullish CRT (Standard)
         if c_low < p_low and c_close > p_low:
-            logger.info(f"MATCH BULLISH: {ticker} su {tf}")
             sl = c_low
             tp = p_high # Target prev High of the range/candle
             risk = c_close - sl
@@ -344,6 +392,11 @@ def detect_crt_logic(ticker, df, tf):
             # Analyze Wick on C0 (Current Sweep Candle)
             is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bullish', current_atr)
             
+            # Confluences
+            has_div = check_divergence(df, rsi_series, 'bullish')
+            hitting_fvg = detect_fvg_confluence(df, 'bullish')
+            logger.info(f"MATCH BULLISH: {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
+
             return {
                 "symbol": ticker,
                 "timeframe": tf,
@@ -351,21 +404,26 @@ def detect_crt_logic(ticker, df, tf):
                 "range_high": p_high,
                 "range_low": p_low,
                 "price": c_close,
+                "entry_price": c_close,
+                "result": "OPEN",
                 "is_active": True,
                 "stop_loss": round(sl, 2),
                 "take_profit": round(tp, 2),
                 "rr_ratio": rr,
                 "liquidity_tier": tier,
                 "session_tag": session,
-                "fvg_detected": False,
-                "smt_divergence": False,
+                "fvg_detected": hitting_fvg,
+                "hitting_fvg": hitting_fvg,
+                "has_divergence": has_div,
+                "smt_divergence": has_div,
+                "adr_percent": adr_pct,
+                "rel_volume": rel_vol,
                 "volatility_warning": is_volatile,
                 "is_golden_wick": is_golden
             }
 
         # Bearish CRT
         if c_high > p_high and c_close < p_high:
-            logger.info(f"MATCH BEARISH: {ticker} su {tf}")
             sl = c_high
             tp = p_low
             risk = sl - c_close
@@ -374,6 +432,11 @@ def detect_crt_logic(ticker, df, tf):
             
             # Analyze Wick on C0 (Current Sweep Candle)
             is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bearish', current_atr)
+            
+            # Confluences
+            has_div = check_divergence(df, rsi_series, 'bearish')
+            hitting_fvg = detect_fvg_confluence(df, 'bearish')
+            logger.info(f"MATCH BEARISH: {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
 
             return {
                 "symbol": ticker,
@@ -382,14 +445,20 @@ def detect_crt_logic(ticker, df, tf):
                 "range_high": p_high,
                 "range_low": p_low,
                 "price": c_close,
+                "entry_price": c_close,
+                "result": "OPEN",
                 "is_active": True,
                 "stop_loss": round(sl, 2),
                 "take_profit": round(tp, 2),
                 "rr_ratio": rr,
                 "liquidity_tier": tier,
                 "session_tag": session,
-                "fvg_detected": False,
-                "smt_divergence": False,
+                "fvg_detected": hitting_fvg,
+                "hitting_fvg": hitting_fvg,
+                "has_divergence": has_div,
+                "smt_divergence": has_div,
+                "adr_percent": adr_pct,
+                "rel_volume": rel_vol,
                 "volatility_warning": is_volatile,
                 "is_golden_wick": is_golden
             }
@@ -397,6 +466,7 @@ def detect_crt_logic(ticker, df, tf):
         logger.error(f"Errore calcolo CRT per {ticker} [{tf}]: {e}")
     
     return None
+
 
 def analyze_market_context():
     """Analizza SPY e QQQ per determinare il bias di mercato (Bullish/Bearish)."""
@@ -425,6 +495,164 @@ def analyze_market_context():
     except Exception as e:
         logger.error(f"Errore analisi market bias: {e}")
         return 'NEUTRAL'
+
+
+def calculate_rsi(series, period=14):
+    """Calcola RSI manualmente senza pandas_ta."""
+    try:
+        delta = series.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        
+        # Inizializzazione corretta (Wilder's Smoothing) sarebbe meglio, ma SMA va bene per crypto/stocks standard
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    except:
+        return pd.Series([50]*len(series))
+
+def check_divergence(df, rsi_series, type_direction):
+    """
+    Controlla divergenza RSI 'Sniper'.
+    Bullish: Prezzo fa Lower Low (Sweep), RSI fa Higher Low.
+    Bearish: Prezzo fa Higher High (Sweep), RSI fa Lower High.
+    """
+    try:
+        if len(df) < 5: return False
+        
+        # Indici: -1 è la candela corrente (lo sweep, o setup)
+        # Indici: -2 è la candela precedente completata
+        
+        # Usiamo -1 come punto di riferimento (il Massimo/Minimo attuale)
+        curr_idx = df.index[-1]
+        curr_rsi = rsi_series.iloc[-1]
+        
+        # Definiamo la finestra di ricerca per il pivot precedente (es. ultime 20 candele)
+        lookback = 20
+        # Slice escludendo la candela corrente per trovare lo swing precedente
+        subset_price = df.iloc[-lookback:-1] 
+        subset_rsi = rsi_series.iloc[-lookback:-1]
+        
+        if type_direction == 'bullish':
+             curr_low = df['Low'].iloc[-1]
+             
+             # Trova il punto più basso nel passato recente (Swing Low precedente)
+             prev_low_idx = subset_price['Low'].idxmin()
+             prev_low = subset_price['Low'].loc[prev_low_idx]
+             
+             # Prendi l'RSI ESATTAMENTE su quella candela
+             # Nota: prev_low_idx è un Timestamp se l'indice è datetime, o int se è range
+             # Assicuriamoci di accedere all'RSI con lo stesso indice
+             try:
+                 prev_rsi = rsi_series.loc[prev_low_idx]
+             except:
+                 # Fallback se indici disallineati (raro con pandas Series allineate)
+                 return False
+
+             # Logica: Prezzo Current < Prezzo Prev (Lower Low) MA RSI Current > RSI Prev (Higher Low)
+             if curr_low < prev_low and curr_rsi > prev_rsi:
+                 # Check aggiuntivo: RSI non deve essere in Ipercomprato durante una divergenza bullish (opzionale)
+                 return True
+                 
+        elif type_direction == 'bearish':
+             curr_high = df['High'].iloc[-1]
+             
+             # Trova il punto più alto nel passato recente (Swing High precedente)
+             prev_high_idx = subset_price['High'].idxmax()
+             prev_high = subset_price['High'].loc[prev_high_idx]
+             
+             try:
+                 prev_rsi = rsi_series.loc[prev_high_idx]
+             except:
+                 return False
+                 
+             # Logica: Prezzo Current > Prezzo Prev (Higher High) MA RSI Current < RSI Prev (Lower High)
+             if curr_high > prev_high and curr_rsi < prev_rsi:
+                 return True
+                 
+        return False
+    except Exception as e:
+        logger.warning(f"Errore divergenza: {e}")
+        return False
+
+def calculate_adr_percent(df, period=5):
+    """Calcola % del range odierno rispetto all'ADR 5 giorni."""
+    try:
+        # Calcola range giornalieri
+        daily_ranges = df['High'] - df['Low']
+        # Media ultimi 5 giorni (escludendo oggi se è incompleta, ma qui abbiamo candele completate o correnti)
+        # Se siamo intraday, questo calcolo è approssimato se non abbiamo dati giornalieri separati.
+        # Assumiamo df sia del timeframe corrente. Se intraday, dobbiamo stimare ADR.
+        # Fallback: Usiamo ATR 14 come proxy se non possiamo calcolare ADR daily corretto da dati orari
+        
+        # Se il timeframe è D o W, è facile.
+        # Se è H1/H4, usiamo l'ATR * un moltiplicatore o cerchiamo di inferire.
+        # Soluzione semplice: Usare ATR(14) come 'Normal Range' e confrontare la candela attuale (o la somma delle ultime N)
+        
+        # Ma l'utente chiede specificamente ADR (Daily Range).
+        # Implementazione corretta richiederebbe dati Daily separati.
+        # Per ora usiamo il Range della candela attuale vs Media Range ultime 5 candele DELLO STESSO TIMEFRAME
+        # Se siamo in D1 è perfetto. Se siamo in H1, confrontiamo la volatilità oraria (AHR?).
+        
+        # Manteniamo la logica semplice per ora: Range attuale vs Average Range (5 periodi)
+        current_range = df['High'].iloc[-1] - df['Low'].iloc[-1]
+        avg_range = daily_ranges.rolling(window=period).mean().iloc[-2] # Media precedenti
+        
+        if avg_range == 0: return 0
+        return int((current_range / avg_range) * 100)
+    except:
+        return 0
+
+def detect_fvg_confluence(df, type_direction):
+    """
+    Rileva se il prezzo tocca un FVG opposto recente.
+    Bearish Sweep -> Tocca FVG Bearish sopra?
+    Bullish Sweep -> Tocca FVG Bullish sotto?
+    """
+    try:
+        # Cerca FVG nelle ultime 30 candele
+        lookback = 30
+        fvgs = []
+        
+        # Scan ultimi periodi per trovare FVG non mitigati
+        for i in range(len(df)-lookback, len(df)-2):
+            c1 = df.iloc[i]
+            c2 = df.iloc[i+1] # Gap candle
+            c3 = df.iloc[i+2]
+            
+            if type_direction == 'bearish':
+                # Cerchiamo Bearish FVG (per shortare dopo sweep high)
+                # Bearish FVG: Low[i] > High[i+2]
+                if c1['Low'] > c3['High']:
+                    top = c1['Low']
+                    bottom = c3['High']
+                    fvgs.append((top, bottom))
+            else:
+                 # Bullish FVG
+                 if c1['High'] < c3['Low']:
+                     bottom = c1['High']
+                     top = c3['Low']
+                     fvgs.append((top, bottom))
+        
+        if not fvgs: return False
+        
+        # Controlla se il massimo/minimo della candela sweep (ultima) entra in uno di questi FVG
+        curr = df.iloc[-1]
+        hit = False
+        
+        for top, bottom in fvgs:
+            if type_direction == 'bearish':
+                # Sweep High entra nel Bearish FVG
+                if curr['High'] >= bottom and curr['High'] <= (top * 1.01): # Tolleranza 1% sopra
+                    hit = True
+            else:
+                # Sweep Low entra nel Bullish FVG
+                if curr['Low'] <= top and curr['Low'] >= (bottom * 0.99):
+                    hit = True
+        
+        return hit
+    except:
+        return False
 
 def validate_existing_signals(ticker, df, active_signals_map):
     """
@@ -467,9 +695,10 @@ def validate_existing_signals(ticker, df, active_signals_map):
                 reason = "PROFIT"
         
         if should_expire:
-            result_code = 'TP_HIT' if reason == 'PROFIT' else 'SL_HIT' if reason == 'STOPPED' else 'MANUAL_CLOSE'
+            # Mappa risultato: PROFIT -> WIN, STOPPED -> LOSS
+            result_code = 'WIN' if reason == 'PROFIT' else 'LOSS' if reason == 'STOPPED' else 'MANUAL_CLOSE'
             
-            logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason}")
+            logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason} -> {result_code}")
             updates.append({
                 "id": sig['id'],
                 "is_active": False,
@@ -477,6 +706,82 @@ def validate_existing_signals(ticker, df, active_signals_map):
             })
 
     return updates
+
+
+def check_open_trades():
+    """
+    Controlla tutti i trade 'OPEN' nel database e verifica se hanno colpito TP o SL.
+    """
+    try:
+        response = supabase.table('crt_signals').select("*").eq('result', 'OPEN').execute()
+        open_signals = response.data
+        
+        if not open_signals:
+            logger.info("Nessun trade OPEN da validare.")
+            return
+
+        logger.info(f"Validazione di {len(open_signals)} trade OPEN...")
+        updates_count = 0
+        
+        symbols = list(set([s['symbol'] for s in open_signals]))
+        
+        try:
+            tickers_str = " ".join(symbols)
+            if not tickers_str: return
+            
+            curr_data = yf.download(tickers_str, period="1d", interval="1m", progress=False, group_by='ticker')
+            
+            for signal in open_signals:
+                try:
+                    sym = signal['symbol']
+                    
+                    if len(symbols) == 1:
+                        df = curr_data
+                    else:
+                        if sym not in curr_data.columns.get_level_values(0):
+                            continue
+                        df = curr_data[sym]
+                        
+                    if df.empty: continue
+                    
+                    last_candle = df.iloc[-1]
+                    curr_high = float(last_candle['High'])
+                    curr_low = float(last_candle['Low'])
+                    
+                    result = None
+                    sl = float(signal['stop_loss'])
+                    tp = float(signal['take_profit'])
+                    
+                    if 'bearish' in signal['type'] or 'bearish' in str(signal.get('subtype', '')):
+                        if curr_high >= sl: result = 'LOSS'
+                        elif curr_low <= tp: result = 'WIN'
+                            
+                    elif 'bullish' in signal['type'] or 'bullish' in str(signal.get('subtype', '')):
+                        if curr_low <= sl: result = 'LOSS'
+                        elif curr_high >= tp: result = 'WIN'
+                    
+                    if result:
+                        logger.info(f"Trade CONCLUSO {sym}: {result}")
+                        supabase.table('crt_signals').update({
+                            "result": result,
+                            "is_active": False,
+                            "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+                        }).eq('id', signal['id']).execute()
+                        updates_count += 1
+                        
+                except Exception as inner_e:
+                    logger.error(f"Errore validazione trade {signal['symbol']}: {inner_e}")
+                    continue
+                    
+        except Exception as batch_e:
+             logger.error(f"Errore download prezzi batch: {batch_e}")
+
+        if updates_count > 0:
+            logger.info(f"Aggiornati {updates_count} trade conclusi.")
+            
+    except Exception as e:
+        logger.error(f"Errore generale in check_open_trades: {e}")
+
 
 def main():
     # Fix console encoding on Windows for Emojis
@@ -516,7 +821,24 @@ def main():
     except Exception as e:
         logger.error(f"Errore salvataggio Market Status: {e}")
 
-    # 2. Fetch active signals per validazione
+    # 1B. Fetch Scanner Config from DB
+    scanner_config = {
+        "min_volume": 0,
+        "rvol_threshold": 1.5,
+        "min_market_cap": 0
+    }
+    try:
+        stats_response = supabase.table("launch_stats").select("scanner_min_volume, scanner_rvol_threshold, scanner_min_market_cap").limit(1).single().execute()
+        if stats_response.data:
+            d = stats_response.data
+            scanner_config["min_volume"] = d.get("scanner_min_volume", 0)
+            scanner_config["rvol_threshold"] = float(d.get("scanner_rvol_threshold", 1.5))
+            scanner_config["min_market_cap"] = d.get("scanner_min_market_cap", 0)
+            logger.info(f"Scanner Config caricata: {scanner_config}")
+    except Exception as e:
+        logger.error(f"Errore caricamento config scanner: {e}")
+
+    # 2. Fetch Active Signals for Validation
     try:
         active_response = supabase.table("crt_signals").select("*").eq("is_active", True).execute()
         active_signals_list = active_response.data
@@ -530,6 +852,10 @@ def main():
     except Exception as e:
         logger.error(f"Errore fetch segnali attivi: {e}")
         active_signals_map = {}
+
+    # 3. VALIDAZIONE AUTOMATICA (Paper Trading Update)
+    logger.info("Esecuzione validazione trade automatici...")
+    check_open_trades()
 
     # --- ARGUMENT PARSING ---
     parser = argparse.ArgumentParser(description='CRT Flow Scanner')
@@ -616,24 +942,26 @@ def main():
                     expired_signals_updates.extend(updates)
 
                     # B. Detection nuovi segnali
-                    # 1. Scan timeframe base (1M, 1W, 1D, 1H)
-                    sig = detect_crt_logic(ticker, df, tf)
-                    if sig: 
+                    # 4. Core Logic Detection (Passing Config)
+                    signal = detect_crt_logic(ticker, df, tf, scanner_config)
+                    if signal:
+                        all_detected_signals.append(signal)
+                        logger.info(f"*** SEGNALE TROVATO: {ticker} [{tf}] - {signal['type']} ***")
                         # Check contro-trend
-                        if (market_bias == 'BULLISH' and sig['type'] == 'bearish_sweep') or \
-                           (market_bias == 'BEARISH' and sig['type'] == 'bullish_sweep'):
+                        if (market_bias == 'BULLISH' and signal['type'] == 'bearish_sweep') or \
+                           (market_bias == 'BEARISH' and signal['type'] == 'bullish_sweep'):
                            # Potremmo flaggarlo o scartarlo. Per ora lo teniamo ma potremmo aggiungere un campo 'warning'
                            pass
                         
                         # --- ALERT LOGIC ---
-                        is_major = sig['liquidity_tier'] == 'Major'
-                        is_good_setup = sig['timeframe'] in ['4H', '1D'] and sig['rr_ratio'] >= 2.0
+                        is_major = signal['liquidity_tier'] == 'Major'
+                        is_good_setup = signal['timeframe'] in ['4H', '1D'] and signal['rr_ratio'] >= 2.0
                         
                         if is_major or is_good_setup:
-                             send_telegram_alert(sig, market_bias)
+                             send_telegram_alert(signal, market_bias)
                         # -------------------
 
-                        all_detected_signals.append(sig)
+                        all_detected_signals.append(signal)
 
                     # 2. Se siamo nel ciclo 1H, facciamo resample a 4H internamente
                     if tf == "1H" and not df.empty:
@@ -677,13 +1005,28 @@ def main():
     if expired_signals_updates:
         try:
             logger.info(f"Disattivazione di {len(expired_signals_updates)} segnali scaduti (TP/SL)...")
-            # Supabase non supporta update bulk complessi facilmente, facciamo loop o chiamata singola per ID
-            # Ottimizzazione: Raccogliamo tutti gli ID da disattivare
-            ids_to_expire = [u['id'] for u in expired_signals_updates]
-            # Batch updates in chunks of 500
-            for k in range(0, len(ids_to_expire), 500):
-                 batch_ids = ids_to_expire[k : k + 500]
-                 supabase.table("crt_signals").update({"is_active": False}).in_("id", batch_ids).execute()
+            
+            # Group by Result Type to minimize DB calls
+            updates_by_result = {}
+            for u in expired_signals_updates:
+                res = u['result']
+                if res not in updates_by_result: updates_by_result[res] = []
+                updates_by_result[res].append(u['id'])
+                
+            current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+            
+            for result_code, ids in updates_by_result.items():
+                # Update in chunks of 500
+                for k in range(0, len(ids), 500):
+                    batch = ids[k : k + 500]
+                    supabase.table("crt_signals").update({
+                        "is_active": False,
+                        "result": result_code,
+                        "closed_at": current_time
+                    }).in_("id", batch).execute()
+                    
+            logger.info(f"DB aggiornato con risultati: {list(updates_by_result.keys())}")
+            
         except Exception as e:
              logger.error(f"Errore aggiornamento segnali scaduti: {e}")
 
