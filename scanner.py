@@ -47,8 +47,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # 3. CONFIGURAZIONE TIMEFRAME
 TF_CONFIG = {
-    # Manteniamo il Daily solo per il bias generale, ma lo scan primario è 1H
-    "1D": {"period": "2y", "interval": "1d"},
+    # Il bias Daily viene calcolato a parte. Lo scanner scansionerà SOLO l'1H.
     "1H": {"period": "730d", "interval": "1h"}
 }
 
@@ -929,12 +928,13 @@ def validate_existing_signals(ticker, df, active_signals_map):
         # Spiegazione: La candela Daily di oggi contiene il "sweep" che ha generato il segnale.
         # Se controlliamo la stessa candela per lo SL, lo colpirà quasi sempre (perché lo SL è sul minimo/massimo del sweep).
         try:
-            # Preveniamo la chiusura immediata se il segnale è stato creato OGGI.
-            # Usiamo [:10] per estrarre la data (YYYY-MM-DD) indipendentemente dal separatore (spazio o 'T')
-            signal_date = str(sig['created_at'])[:10]
-            candle_date = curr_candle.name.strftime('%Y-%m-%d')
-            if signal_date == candle_date:
-                continue
+            # Salta la chiusura immediata SOLO se è un trade Daily.
+            # Se è un trade 1H, vogliamo validarlo anche se è lo stesso giorno!
+            if sig.get('timeframe') == '1D':
+                signal_date = str(sig['created_at'])[:10]
+                candle_date = curr_candle.name.strftime('%Y-%m-%d')
+                if signal_date == candle_date:
+                    continue
         except Exception as e:
             pass
 
@@ -1258,7 +1258,7 @@ def main():
 
                 # A. Validazione Segnali Esistenti 
                 updates = []
-                if tf == "1D":
+                if tf == "1H":
                     updates = validate_existing_signals(ticker, df, active_signals_map)
                     expired_signals_updates.extend(updates)
 
