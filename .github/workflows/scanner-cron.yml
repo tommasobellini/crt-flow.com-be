@@ -1,15 +1,16 @@
-name: CRT Flow Daily Scanner
+name: CRT Flow Intraday Scanner
 
 on:
   schedule:
-    # Gira alle 22:15 CET (21:15 UTC) da lunedì a venerdì
-    - cron: '15 21 * * 1-5'
-  workflow_dispatch: # Ti permette di avviarlo a mano per testare
+    # Gira al minuto 5 di ogni ora, dalle 14:00 UTC (15:05 ITA) alle 21:00 UTC (22:05 ITA), lun-ven
+    - cron: '5 14-21 * * 1-5'
+  workflow_dispatch: # Ti permette di avviarlo a mano con un click per testare
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: PROD
+    # Rimosso 'environment: PROD' per far leggere subito i Secrets di base
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,7 +27,7 @@ jobs:
 
       - name: Run Scanner
         env:
-          # Prende le chiavi dai Secrets di GitHub
+          # Prende le chiavi dai Secrets standard di GitHub
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

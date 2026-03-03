@@ -5,20 +5,14 @@ import logging
 import time
 import io
 import requests
+import json
 import yfinance as yf
 import pandas as pd
 from supabase import create_client, Client
 from dotenv import load_dotenv
+
 from notifications import send_telegram_alert
-import logging
-import time
-import io
-import requests
-import yfinance as yf
-import pandas as pd
-from supabase import create_client, Client
-from dotenv import load_dotenv
-from notifications import send_telegram_alert
+from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence
 
 # 1. CONFIGURAZIONE LOGGING
 logging.basicConfig(
@@ -52,13 +46,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # 3. CONFIGURAZIONE TIMEFRAME
-# Definiamo i periodi necessari per avere abbastanza candele per il calcolo
 TF_CONFIG = {
-    "3M": {"period": "10y", "interval": "3mo"}, # Base for Quarterly & Yearly
-    "1M": {"period": "2y", "interval": "1mo"},
-    "1W": {"period": "1y", "interval": "1wk"},
-    "1D": {"period": "6mo", "interval": "1d"},
-    "1H": {"period": "7d", "interval": "1h"},
+    # Manteniamo il Daily solo per il bias generale, ma lo scan primario è 1H
+    "1D": {"period": "2y", "interval": "1d"},
+    "1H": {"period": "730d", "interval": "1h"}
 }
 
 def get_sp500_tickers():
@@ -75,7 +66,12 @@ def get_sp500_tickers():
         table = pd.read_html(io.StringIO(response.text))
         tickers = table[0]['Symbol'].tolist()
         # Pulizia ticker (es. BRK.B invece di BRK-B per yfinance)
-        tickers = [t.replace('.', '-') for t in tickers]
+        # Pulizia ticker (es. BRK.B invece di BRK-B per yfinance)
+        valid_tickers = []
+        for t in tickers:
+            if isinstance(t, str) and len(t) <= 8 and ' ' not in t:
+                valid_tickers.append(t.replace('.', '-'))
+        return valid_tickers
         logger.info(f"Ottenuti {len(tickers)} ticker S&P 500.")
         return tickers
     except Exception as e:
@@ -106,9 +102,14 @@ def get_nasdaq100_tickers():
              # Fallback index 4 (storicamente corretto)
              tickers = table[4]['Ticker'].tolist()
 
-        tickers = [t.replace('.', '-') for t in tickers]
-        logger.info(f"Ottenuti {len(tickers)} ticker NASDAQ 100.")
-        return tickers
+        # Validate tickers
+        valid_tickers = []
+        for t in tickers:
+            if isinstance(t, str) and len(t) <= 8 and ' ' not in t:
+                valid_tickers.append(t.replace('.', '-'))
+                
+        logger.info(f"Ottenuti {len(valid_tickers)} ticker NASDAQ 100.")
+        return valid_tickers
     except Exception as e:
         logger.error(f"Errore nel recupero ticker NASDAQ 100: {e}")
         return []
@@ -130,9 +131,14 @@ def get_russell2000_tickers():
             reader = csv.DictReader(f)
             for row in reader:
                 val = row.get('Ticker')
-                if val and val.strip() and val != '-':
+                if val and isinstance(val, str) and val.strip() and val != '-':
+                    val = val.strip()
+                    # Sanity Check: Ticker validi sono brevi e senza spazi
+                    if len(val) > 8 or ' ' in val: 
+                        continue
+                    
                     # Clean ticker (e.g. BRK.B -> BRK-B)
-                    tickers.append(val.strip().replace('.', '-'))
+                    tickers.append(val.replace('.', '-'))
                     
         logger.info(f"Ottenuti {len(tickers)} ticker Russell 2000.")
         return tickers
@@ -156,503 +162,752 @@ def get_session_tag(timestamp):
         pass
     return 'None'
 
-def calculate_atr(df, period=14):
-    try:
-        high = df['High']
-        low = df['Low']
-        close = df['Close'].shift(1)
-        
-        tr1 = high - low
-        tr2 = (high - close).abs()
-        tr3 = (low - close).abs()
-        
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean().iloc[-1]
-        return atr
-    except:
-        return 0
 
-def get_wick_analysis(candle, type_direction, atr):
-    """
-    Analizza la wick in base alla logica Wyckoff (Effort is Result).
-    Returns: (is_golden, is_volatile, wick_ratio)
-    """
+
+
+
+# --- FALLBACK MECHANISM ---
+def save_failed_signals(signals):
+    """Salva i segnali su disco se il database fallisce."""
     try:
-        full_range = float(candle['High']) - float(candle['Low'])
-        if full_range == 0: return False, False, 0
+        filename = "failed_signals.json"
+        # Se esiste già, appende o sovrascrive? Sovrascriviamo o mergiamo.
+        existing = []
+        if os.path.exists(filename):
+            try:
+                with open(filename, 'r') as f:
+                    existing = json.load(f)
+            except: pass
         
-        open_p = float(candle['Open'])
-        close_p = float(candle['Close'])
-        high_p = float(candle['High'])
-        low_p = float(candle['Low'])
+        merged = existing + signals
+        with open(filename, 'w') as f:
+            json.dump(merged, f, indent=2, default=str) # default=str per date/time
+        logger.warning(f"Salvati {len(signals)} segnali in {filename} per retry successivo.")
+    except Exception as e:
+        logger.error(f"Impossibile salvare backup locale: {e}")
+
+def retry_failed_uploads():
+    """Tenta di caricare i segnali salvati localmente."""
+    filename = "failed_signals.json"
+    if not os.path.exists(filename):
+        return
+
+    logger.info("Trovato file di backup segnali. Tentativo di ripristino...")
+    try:
+        with open(filename, 'r') as f:
+            signals = json.load(f)
         
-        wick_len = 0
-        if type_direction == 'bullish':
-            # Lower Wick
-            body_bottom = min(open_p, close_p)
-            wick_len = body_bottom - low_p
+        if not signals:
+            os.remove(filename)
+            return
+
+        # Insert batch
+        success = True
+        for j in range(0, len(signals), 1000):
+            batch = signals[j : j + 1000]
+            try:
+                supabase.table("crt_signals").insert(batch).execute()
+            except Exception as e:
+                logger.error(f"Errore ripristino batch: {e}")
+                success = False
+        
+        if success:
+             logger.info(f"Ripristinati con successo {len(signals)} segnali.")
+             os.remove(filename)
         else:
-            # Upper Wick
-            body_top = max(open_p, close_p)
-            wick_len = high_p - body_top
-            
-        wick_ratio = wick_len / full_range
-        
-        # Wyckoff Logic
-        # 1. Extreme Wick (> 70% range OR > 1.5x ATR)
-        is_volatile = (wick_ratio > 0.70) or (atr > 0 and wick_len > 1.5 * atr)
-        
-        # 2. Golden Wick (30% - 50%) AND Controlled Energy (< 0.8x ATR approx?? User said ~0.5)
-        # Relaxed check: just ratio 0.3-0.5 and not volatile
-        is_golden = (0.30 <= wick_ratio <= 0.50) and not is_volatile
-        
-        return bool(is_golden), bool(is_volatile), wick_ratio
-    except:
-        return False, False, 0
+             logger.warning("Alcuni segnali non sono stati ripristinati. Il file di backup rimane.")
+
+    except Exception as e:
+        logger.error(f"Errore generale retry uploads: {e}")
 
 
-def detect_crt_logic(ticker, df, tf, config=None):
-    if df is None or len(df) < 5:
+
+
+def clean_df(df):
+    """Garantisce che il DataFrame sia in un formato standard (singolo indice, no duplicati, nomi puliti)."""
+    if df is None or df.empty: return df
+    df = df.copy()
+    
+    # 1. Se ha MultiIndex (yfinance bulk), prendi l'ultimo livello
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(-1)
+    
+    # 2. Se le colonne sono comunque tuple (es. ('AAPL', 'Open')), prendi l'ultimo elemento
+    if any(isinstance(c, tuple) for c in df.columns):
+        df.columns = [c[-1] if isinstance(c, tuple) else c for c in df.columns]
+
+    # 3. Normalizzazione Nomi (Case-insensitive -> Title Case standard)
+    new_cols = []
+    for c in df.columns:
+        c_str = str(c).strip().lower()
+        if c_str == 'open': new_cols.append('Open')
+        elif c_str == 'high': new_cols.append('High')
+        elif c_str == 'low': new_cols.append('Low')
+        elif c_str == 'close': new_cols.append('Close')
+        elif c_str == 'volume': new_cols.append('Volume')
+        elif 'adj' in c_str: new_cols.append('Adj Close')
+        else: new_cols.append(str(c).strip())
+    df.columns = new_cols
+
+    # 4. Rimuovi colonne duplicate
+    df = df.loc[:, ~df.columns.duplicated()]
+    return df
+
+def to_f(val):
+    """Converte in float in modo robusto, gestendo Series o array."""
+    if hasattr(val, 'iloc'): 
+        if hasattr(val, 'empty') and val.empty: return 0.0
+        v = val.iloc[0]
+        # Se è ancora un oggetto complesso (es. slice di DataFrame), scendi ancora
+        if hasattr(v, 'iloc'): v = v.iloc[0]
+        return float(v)
+    return float(val)
+
+def to_b(val):
+    """Converte in bool in modo robusto."""
+    if hasattr(val, 'iloc'):
+        if hasattr(val, 'empty') and val.empty: return False
+        v = val.iloc[0]
+        if hasattr(v, 'iloc'): v = v.iloc[0]
+        return bool(v)
+    return bool(val)
+
+def detect_macro_sweep(ticker, df, tf, config=None):
+    """
+    Cerca SOLO "Macro Sweeps" (HTF Confluence):
+    1. Aggrega i dati Daily in Weekly, Monthly, Quarterly.
+    2. Controlla se la candela DAILY corrente (Trigger) ha 'sweeppato' un livello HTF precedente.
+    3. Reclaim (chiusura dentro il range del periodo precedente).
+    """
+    # Permettiamo allo scanner di analizzare sia il Daily che l'Orario
+    if tf not in ['1D', '1H']: return None
+    
+    df = clean_df(df)
+    if df is None or len(df) < 60: # Servono abbastanza dati per resample Monthly/Quarterly
         return None
 
-    # Default config if None
-    if config is None:
-        config = {"min_volume": 0, "rvol_threshold": 1.5}
-
     try:
-        # Prendi le ultime due candele COMPLETATE
-        prev_candle = df.iloc[-2]
-        curr_candle = df.iloc[-1]
+        # --- 1. DATA AGGREGATION (RESAMPLING) ---
+        agg_map = {'High': 'max', 'Low': 'min', 'Close': 'last', 'Open': 'first'}
         
-        # --- FILTRO 0: MIN VOLUME ---
-        curr_vol = float(curr_candle['Volume'])
-        if curr_vol < config["min_volume"]:
-             return None
+        # Weekly
+        df_w = df.resample('W').agg(agg_map).dropna()
+        if len(df_w) < 2: return None
+        prev_w = df_w.iloc[-2]
 
-        # ... (rest of logic) ...
+        # Monthly (ME = Month End)
+        df_m = df.resample('ME').agg(agg_map).dropna() 
+        prev_m = None if len(df_m) < 2 else df_m.iloc[-2]
 
-        p_high = float(prev_candle['High'])
-        p_low = float(prev_candle['Low'])
-        
-        c_high = float(curr_candle['High'])
-        c_low = float(curr_candle['Low'])
-        c_close = float(curr_candle['Close'])
+        # Quarterly
+        df_q = df.resample('QE').agg(agg_map).dropna()
+        prev_q = None if len(df_q) < 2 else df_q.iloc[-2]
 
-        # Institutional Metrics Calculation
-        sl = 0.0
-        tp = 0.0
-        rr = 0.0
-        tier = 'Major' if tf in ['1M', '1W'] else 'Minor'
-        session = get_session_tag(curr_candle.name) if hasattr(curr_candle, 'name') else 'None'
+        # Semi-Annual (6M)
+        prev_6m = None
+        try:
+             df_6m = df.resample('6ME').agg(agg_map).dropna()
+             if len(df_6m) >= 2: prev_6m = df_6m.iloc[-2]
+        except:
+             pass
+
+        # --- 2. THE TRIGGER (Daily Candle) ---
+        curr = df.iloc[-1]
+        c_high = to_f(curr['High'])
+        c_low = to_f(curr['Low'])
+        c_close = to_f(curr['Close'])
         
-        # Calculate ATR for Volatility Checks
-        current_atr = calculate_atr(df)
-        
-        # --- NEW INDICATORS ---
-        # 1. RSI & Divergence
+        # Basic context
+        month_now = curr.name.month if hasattr(curr.name, 'month') else 0
         rsi_series = calculate_rsi(df['Close'])
         
-        # 2. Volume Spike (Using Dynamic RVOL Threshold)
-        vol_sma = df['Volume'].rolling(window=20).mean().iloc[-1]
-        rel_vol = round(curr_vol / vol_sma, 2) if vol_sma > 0 else 0
-        
-        # --- FILTRO 1: RVOL (Relative Volume) ---
-        # Un Turtle Soup necessita di volume. Se bassa partecipazione, è un fakeout.
-        if curr_vol < (vol_sma * config["rvol_threshold"]):
-            # logger.debug(f"Scartato {ticker}: Low Volume (RVOL {rel_vol} < {config['rvol_threshold']})")
-            return None 
+        # Helper per check sweep
+        def check_sweep(level_name, level_high, level_low, importance_score):
+             # NOISE FILTER: Ignore scans < 0.05% difference
+             # Logic is: Did we sweep? How much?
+             sweep_pct = 0.0
+             
+             # A. Bearish Sweep
+             if c_high > level_high and c_close < level_high:
+                 sweep_diff = abs(c_high - level_high)
+                 sweep_pct = sweep_diff / level_high
+                 if sweep_pct < 0.0005: 
+                     return None # Too small, just noise
 
-        # --- FILTRO 2: KILLZONES (Timing) ---
-        valid_sessions = ['London', 'NY']
-        if tf in ['1H', '4H'] and session not in valid_sessions:
+                 seas_score = get_seasonality_score(month_now, 'bearish')
+                 
+                 # Map level name to confluence code
+                 confluence_code = "PWH" 
+                 if "monthly" in level_name: confluence_code = "PMH"
+                 if "quarterly" in level_name: confluence_code = "PQH"
+                 if "semi" in level_name: confluence_code = "6MH"
+                 
+                 # Map importance to Diamond Score
+                 diamond_score = "B"
+                 if importance_score == "GOD_MODE": diamond_score = "A++"
+                 if importance_score == "A++": diamond_score = "A++"
+                 if importance_score == "A": diamond_score = "A+"
+
+                 sl = c_high
+                 risk = sl - c_close
+                 # NUOVO CODICE (Intraday Risk Sizing): 
+                 # Rischio strutturale minimo dello 0.3% per assorbire il rumore dell'1H
+                 min_risk = c_close * 0.003
+                 
+                 if risk < min_risk:
+                     sl = c_close + min_risk
+                     risk = sl - c_close
+
+                 tp = c_close - (risk * 3)
+                 
+                 return {
+                    "symbol": ticker,
+                    "timeframe": tf,
+                    "type": "bearish_sweep",
+                    "subtype": f"{level_name}_sweep",
+                    "range_high": level_high,
+                    "range_low": level_low,
+                    "price": c_close,
+                    "entry_price": c_close,
+                    "result": None,
+                    "is_active": True,
+                    "stop_loss": round(sl, 2),
+                    "take_profit": round(tp, 2),
+                    "rr_ratio": 3.0,
+                    "liquidity_tier": level_name.capitalize(),
+                    "session_tag": importance_score,
+                    "has_divergence": seas_score > 0,
+                    "seasonality_score": seas_score,
+                    "diamond_score": diamond_score,
+                    "confluence_level": confluence_code,
+                    "fvg_detected": False,
+                    "hitting_fvg": False,
+                    "smt_divergence": False,
+                    "adr_percent": 0,
+                    "rel_volume": 0,
+                    "volatility_warning": False,
+                    "is_golden_wick": True
+                 }
+                 
+             # B. Bullish Sweep
+             if c_low < level_low and c_close > level_low:
+                 sweep_diff = abs(level_low - c_low)
+                 sweep_pct = sweep_diff / level_low
+                 if sweep_pct < 0.0005: 
+                     return None # Too small
+
+                 seas_score = get_seasonality_score(month_now, 'bullish')
+                 
+                 confluence_code = "PWL"
+                 if "monthly" in level_name: confluence_code = "PML"
+                 if "quarterly" in level_name: confluence_code = "PQL"
+                 if "semi" in level_name: confluence_code = "6ML"
+
+                 diamond_score = "B"
+                 if importance_score == "GOD_MODE": diamond_score = "A++"
+                 if importance_score == "A++": diamond_score = "A++"
+                 if importance_score == "A": diamond_score = "A+"
+
+                 # Swing Trading Check: Min risk 2% of price for big moves
+                 sl = c_low
+                 risk = c_close - sl
+                 # NUOVO CODICE (Intraday Risk Sizing): 
+                 # Rischio strutturale minimo dello 0.3% per assorbire il rumore dell'1H
+                 min_risk = c_close * 0.003
+                 
+                 if risk < min_risk:
+                     sl = c_close - min_risk
+                     risk = c_close - sl
+
+                 tp = c_close + (risk * 3)
+                 
+                 return {
+                    "symbol": ticker,
+                    "timeframe": tf,
+                    "type": "bullish_sweep",
+                    "subtype": f"{level_name}_sweep",
+                    "range_high": level_high,
+                    "range_low": level_low,
+                    "price": c_close,
+                    "entry_price": c_close,
+                    "result": None,
+                    "is_active": True,
+                    "stop_loss": round(sl, 2),
+                    "take_profit": round(tp, 2),
+                    "rr_ratio": 3.0,
+                    "liquidity_tier": level_name.capitalize(),
+                    "session_tag": importance_score,
+                    "has_divergence": seas_score > 0,
+                    "seasonality_score": seas_score,
+                    "diamond_score": diamond_score,
+                    "confluence_level": confluence_code,
+                    "fvg_detected": False,
+                    "hitting_fvg": False,
+                    "smt_divergence": False,
+                    "adr_percent": 0,
+                    "rel_volume": 0,
+                    "volatility_warning": False,
+                    "is_golden_wick": True,
+                    "touches": 0,
+                    "market_bias": None,
+                    "max_favorable_excursion": 0.0
+                 }
              return None
 
-        # 3. ADR / Range Exhaustion
-        adr_pct = calculate_adr_percent(df)
+        # Check Hierarchy: Quarterly > Monthly > Weekly
+        
+        # 0. Semi-Annual Sweep (God Mode - Tier 2)
+        if prev_6m is not None:
+             sig = check_sweep("semi_annual", prev_6m['High'], prev_6m['Low'], "GOD_MODE")
+             if sig: return sig
 
-        # --- NEW: PERFECT RECLAIM (Equilibrium Reversal) ---
-        try:
-            c0 = df.iloc[-1] # Current / Reclaim
-            c1 = df.iloc[-2] # Sweep Candle (This implies the wick analysis should run on C1)
-            c2 = df.iloc[-3] # Base / Pre-Sweep
+        # 1. Quarterly Sweep (God Mode - Tier 1)
+        if prev_q is not None:
+            sig = check_sweep("quarterly", prev_q['High'], prev_q['Low'], "GOD_MODE")
+            if sig: return sig
             
-            c0_close = float(c0['Close'])
-            c2_close = float(c2['Close'])
+        # 2. Monthly Sweep (A++)
+        if prev_m is not None:
+            sig = check_sweep("monthly", prev_m['High'], prev_m['Low'], "A++")
+            if sig: return sig
             
-            # Condition 1: Perfect Alignment (0.03% tolerance)
-            price_delta = abs(c0_close - c2_close)
-            threshold = c0.Close * 0.0003 
-            is_perfect_reclaim = price_delta < threshold
-            
-            if is_perfect_reclaim:
-                # Condition 2: Check if c1 was a valid Sweep (Bullish or Bearish)
-                c1_low = float(c1['Low'])
-                c1_high = float(c1['High'])
-                c2_low = float(c2['Low'])
-                c2_high = float(c2['High'])
-                
-                # Was it a Bullish Sweep? (c1 low < c2 low)
-                was_bullish_sweep = c1_low < c2_low
-                # Was it a Bearish Sweep? (c1 high > c2 high)
-                was_bearish_sweep = c1_high > c2_high
-                
-                if was_bullish_sweep:
-                    sl = c1_low
-                    tp = float(c2['High']) # Target range high
-                    risk = c0_close - sl
-                    reward = tp - c0_close
-                    rr = round(reward / risk, 2) if risk > 0 else 0
-                    
-                    # Analyze Wick on C1 (The Sweep Candle)
-                    is_golden, is_volatile, _ = get_wick_analysis(c1, 'bullish', current_atr)
-                    
-                    # Confluences
-                    has_div = check_divergence(df, rsi_series, 'bullish')
-                    hitting_fvg = detect_fvg_confluence(df, 'bullish')
-                    logger.info(f"MATCH EQUILIBRIUM (BULLISH): {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
+        # 3. Weekly Sweep (A)
+        # Solo se non abbiamo già trovato roba più grossa
+        sig = check_sweep("weekly", prev_w['High'], prev_w['Low'], "A")
+        if sig: return sig
 
-                    return {
-                        "symbol": ticker,
-                        "timeframe": tf,
-                        "type": "equilibrium_reversal", # Special Type
-                        "subtype": "bullish",
-                        "range_high": float(c2['High']),
-                        "range_low": c1_low,
-                        "price": c0_close,
-                        "entry_price": c0_close, # Explicit Entry
-                        "result": "OPEN",
-                        "is_active": True,
-                        "stop_loss": round(sl, 2),
-                        "take_profit": round(tp, 2),
-                        "rr_ratio": rr,
-                        "liquidity_tier": tier,
-                        "session_tag": session,
-                        "fvg_detected": hitting_fvg, # Remapped
-                        "hitting_fvg": hitting_fvg, # New schema
-                        "has_divergence": has_div, # New schema
-                        "smt_divergence": has_div, # Legacy
-                        "adr_percent": adr_pct,
-                        "rel_volume": rel_vol,
-                        "volatility_warning": is_volatile,
-                        "is_golden_wick": is_golden
-                    }
-                
-                elif was_bearish_sweep:
-                    sl = c1_high
-                    tp = float(c2['Low'])
-                    risk = sl - c0_close
-                    reward = c0_close - tp
-                    rr = round(reward / risk, 2) if risk > 0 else 0
-                    
-                    # Analyze Wick on C1 (The Sweep Candle)
-                    is_golden, is_volatile, _ = get_wick_analysis(c1, 'bearish', current_atr)
-                    
-                    # Confluences
-                    has_div = check_divergence(df, rsi_series, 'bearish')
-                    hitting_fvg = detect_fvg_confluence(df, 'bearish')
-                    logger.info(f"MATCH EQUILIBRIUM (BEARISH): {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
-
-                    return {
-                        "symbol": ticker,
-                        "timeframe": tf,
-                        "type": "equilibrium_reversal",
-                        "subtype": "bearish",
-                        "range_high": c1_high,
-                        "range_low": float(c2['Low']),
-                        "price": c0_close,
-                        "entry_price": c0_close,
-                        "result": "OPEN",
-                        "is_active": True,
-                        "stop_loss": round(sl, 2),
-                        "take_profit": round(tp, 2),
-                        "rr_ratio": rr,
-                        "liquidity_tier": tier,
-                        "session_tag": session,
-                        "fvg_detected": hitting_fvg,
-                        "hitting_fvg": hitting_fvg,
-                        "has_divergence": has_div,
-                        "smt_divergence": has_div,
-                        "adr_percent": adr_pct,
-                        "rel_volume": rel_vol,
-                        "volatility_warning": is_volatile,
-                        "is_golden_wick": is_golden
-                    }
-        except Exception as e:
-            # Fallback if index error or other math issue
-            pass
-
-        # Bullish CRT (Standard)
-        if c_low < p_low and c_close > p_low:
-            sl = c_low
-            tp = p_high # Target prev High of the range/candle
-            risk = c_close - sl
-            reward = tp - c_close
-            rr = round(reward / risk, 2) if risk > 0 else 0
-            
-            # Analyze Wick on C0 (Current Sweep Candle)
-            is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bullish', current_atr)
-            
-            # Confluences
-            has_div = check_divergence(df, rsi_series, 'bullish')
-            hitting_fvg = detect_fvg_confluence(df, 'bullish')
-            logger.info(f"MATCH BULLISH: {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
-
-            return {
-                "symbol": ticker,
-                "timeframe": tf,
-                "type": "bullish_sweep",
-                "range_high": p_high,
-                "range_low": p_low,
-                "price": c_close,
-                "entry_price": c_close,
-                "result": "OPEN",
-                "is_active": True,
-                "stop_loss": round(sl, 2),
-                "take_profit": round(tp, 2),
-                "rr_ratio": rr,
-                "liquidity_tier": tier,
-                "session_tag": session,
-                "fvg_detected": hitting_fvg,
-                "hitting_fvg": hitting_fvg,
-                "has_divergence": has_div,
-                "smt_divergence": has_div,
-                "adr_percent": adr_pct,
-                "rel_volume": rel_vol,
-                "volatility_warning": is_volatile,
-                "is_golden_wick": is_golden
-            }
-
-        # Bearish CRT
-        if c_high > p_high and c_close < p_high:
-            sl = c_high
-            tp = p_low
-            risk = sl - c_close
-            reward = c_close - tp
-            rr = round(reward / risk, 2) if risk > 0 else 0
-            
-            # Analyze Wick on C0 (Current Sweep Candle)
-            is_golden, is_volatile, _ = get_wick_analysis(curr_candle, 'bearish', current_atr)
-            
-            # Confluences
-            has_div = check_divergence(df, rsi_series, 'bearish')
-            hitting_fvg = detect_fvg_confluence(df, 'bearish')
-            logger.info(f"MATCH BEARISH: {ticker} su {tf} (Div: {has_div}, FVG: {hitting_fvg})")
-
-            return {
-                "symbol": ticker,
-                "timeframe": tf,
-                "type": "bearish_sweep",
-                "range_high": p_high,
-                "range_low": p_low,
-                "price": c_close,
-                "entry_price": c_close,
-                "result": "OPEN",
-                "is_active": True,
-                "stop_loss": round(sl, 2),
-                "take_profit": round(tp, 2),
-                "rr_ratio": rr,
-                "liquidity_tier": tier,
-                "session_tag": session,
-                "fvg_detected": hitting_fvg,
-                "hitting_fvg": hitting_fvg,
-                "has_divergence": has_div,
-                "smt_divergence": has_div,
-                "adr_percent": adr_pct,
-                "rel_volume": rel_vol,
-                "volatility_warning": is_volatile,
-                "is_golden_wick": is_golden
-            }
     except Exception as e:
-        logger.error(f"Errore calcolo CRT per {ticker} [{tf}]: {e}")
-    
+        pass
+
     return None
 
 
-def analyze_market_context():
-    """Analizza SPY e QQQ per determinare il bias di mercato (Bullish/Bearish)."""
-    try:
-        indices = yf.download(['SPY', 'QQQ'], period="1mo", interval="1d", progress=False, group_by='ticker')
-        bias = {}
-        
-        for ticker in ['SPY', 'QQQ']:
-            if ticker in indices and not indices[ticker].empty:
-                df = indices[ticker]
-                # Semplice logica: Prezzo sopra SMA 20 = Bullish
-                sma20 = df['Close'].rolling(window=20).mean().iloc[-1]
-                curr_price = df['Close'].iloc[-1]
-                bias[ticker] = 'BULLISH' if curr_price > sma20 else 'BEARISH'
-                logger.info(f"Market Bias {ticker}: {bias[ticker]} (Price: {curr_price:.2f}, SMA20: {sma20:.2f})")
-            else:
-                bias[ticker] = 'NEUTRAL'
-        
-        # Bias globale: Se entrambi Bullish -> Bullish, entrambi Bearish -> Bearish, else Neutral
-        if bias['SPY'] == 'BULLISH' and bias['QQQ'] == 'BULLISH':
-            return 'BULLISH'
-        elif bias['SPY'] == 'BEARISH' and bias['QQQ'] == 'BEARISH':
-            return 'BEARISH'
-        else:
-            return 'NEUTRAL'
-    except Exception as e:
-        logger.error(f"Errore analisi market bias: {e}")
-        return 'NEUTRAL'
-
-
-def calculate_rsi(series, period=14):
-    """Calcola RSI manualmente senza pandas_ta."""
-    try:
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        
-        # Inizializzazione corretta (Wilder's Smoothing) sarebbe meglio, ma SMA va bene per crypto/stocks standard
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-    except:
-        return pd.Series([50]*len(series))
-
-def check_divergence(df, rsi_series, type_direction):
+def detect_tbs_setup(ticker, df, tf, config=None):
     """
-    Controlla divergenza RSI 'Sniper'.
-    Bullish: Prezzo fa Lower Low (Sweep), RSI fa Higher Low.
-    Bearish: Prezzo fa Higher High (Sweep), RSI fa Lower High.
+    Rileva il pattern TBS (Turtle Body Soup) ad "alta probabilità".
     """
+    # Permettiamo allo scanner di analizzare sia il Daily che l'Orario
+    if tf not in ['1D', '1H']: return None
+    df = clean_df(df)
+    if df is None or len(df) < 20: return None
+
     try:
-        if len(df) < 5: return False
-        
-        # Indici: -1 è la candela corrente (lo sweep, o setup)
-        # Indici: -2 è la candela precedente completata
-        
-        # Usiamo -1 come punto di riferimento (il Massimo/Minimo attuale)
-        curr_idx = df.index[-1]
-        curr_rsi = rsi_series.iloc[-1]
-        
-        # Definiamo la finestra di ricerca per il pivot precedente (es. ultime 20 candele)
+        # Troviamo i pivot recenti (ultime 20 candele, escludendo le ultime 2 che sono il setup)
         lookback = 20
-        # Slice escludendo la candela corrente per trovare lo swing precedente
-        subset_price = df.iloc[-lookback:-1] 
-        subset_rsi = rsi_series.iloc[-lookback:-1]
-        
-        if type_direction == 'bullish':
-             curr_low = df['Low'].iloc[-1]
-             
-             # Trova il punto più basso nel passato recente (Swing Low precedente)
-             prev_low_idx = subset_price['Low'].idxmin()
-             prev_low = subset_price['Low'].loc[prev_low_idx]
-             
-             # Prendi l'RSI ESATTAMENTE su quella candela
-             # Nota: prev_low_idx è un Timestamp se l'indice è datetime, o int se è range
-             # Assicuriamoci di accedere all'RSI con lo stesso indice
-             try:
-                 prev_rsi = rsi_series.loc[prev_low_idx]
-             except:
-                 # Fallback se indici disallineati (raro con pandas Series allineate)
-                 return False
+        recent_df = df.iloc[-lookback:-2]
+        if recent_df.empty: return None
 
-             # Logica: Prezzo Current < Prezzo Prev (Lower Low) MA RSI Current > RSI Prev (Higher Low)
-             if curr_low < prev_low and curr_rsi > prev_rsi:
-                 # Check aggiuntivo: RSI non deve essere in Ipercomprato durante una divergenza bullish (opzionale)
-                 return True
-                 
-        elif type_direction == 'bearish':
-             curr_high = df['High'].iloc[-1]
-             
-             # Trova il punto più alto nel passato recente (Swing High precedente)
-             prev_high_idx = subset_price['High'].idxmax()
-             prev_high = subset_price['High'].loc[prev_high_idx]
-             
-             try:
-                 prev_rsi = rsi_series.loc[prev_high_idx]
-             except:
-                 return False
-                 
-             # Logica: Prezzo Current > Prezzo Prev (Higher High) MA RSI Current < RSI Prev (Lower High)
-             if curr_high > prev_high and curr_rsi < prev_rsi:
-                 return True
-                 
-        return False
-    except Exception as e:
-        logger.warning(f"Errore divergenza: {e}")
-        return False
+        # Calcoliamo la Media Mobile a 20 periodi del Volume per il breakout
+        if 'Volume' in df.columns:
+            vol_data = df['Volume']
+            if hasattr(vol_data, 'iloc') and len(vol_data.shape) > 1: # DataFrame case
+                vol_data = vol_data.iloc[:, 0]
+            avg_vol_20 = float(vol_data.rolling(20).mean().iloc[-2])
+        else:
+            avg_vol_20 = 0
 
-def calculate_adr_percent(df, period=5):
-    """Calcola % del range odierno rispetto all'ADR 5 giorni."""
-    try:
-        # Calcola range giornalieri
-        daily_ranges = df['High'] - df['Low']
-        # Media ultimi 5 giorni (escludendo oggi se è incompleta, ma qui abbiamo candele completate o correnti)
-        # Se siamo intraday, questo calcolo è approssimato se non abbiamo dati giornalieri separati.
-        # Assumiamo df sia del timeframe corrente. Se intraday, dobbiamo stimare ADR.
-        # Fallback: Usiamo ATR 14 come proxy se non possiamo calcolare ADR daily corretto da dati orari
-        
-        # Se il timeframe è D o W, è facile.
-        # Se è H1/H4, usiamo l'ATR * un moltiplicatore o cerchiamo di inferire.
-        # Soluzione semplice: Usare ATR(14) come 'Normal Range' e confrontare la candela attuale (o la somma delle ultime N)
-        
-        # Ma l'utente chiede specificamente ADR (Daily Range).
-        # Implementazione corretta richiederebbe dati Daily separati.
-        # Per ora usiamo il Range della candela attuale vs Media Range ultime 5 candele DELLO STESSO TIMEFRAME
-        # Se siamo in D1 è perfetto. Se siamo in H1, confrontiamo la volatilità oraria (AHR?).
-        
-        # Manteniamo la logica semplice per ora: Range attuale vs Average Range (5 periodi)
-        current_range = df['High'].iloc[-1] - df['Low'].iloc[-1]
-        avg_range = daily_ranges.rolling(window=period).mean().iloc[-2] # Media precedenti
-        
-        if avg_range == 0: return 0
-        return int((current_range / avg_range) * 100)
-    except:
-        return 0
+        # Candele di setup
+        breakout_candle = df.iloc[-2]
+        reversal_candle = df.iloc[-1]
 
-def detect_fvg_confluence(df, type_direction):
-    """
-    Rileva se il prezzo tocca un FVG opposto recente.
-    Bearish Sweep -> Tocca FVG Bearish sopra?
-    Bullish Sweep -> Tocca FVG Bullish sotto?
-    """
-    try:
-        # Cerca FVG nelle ultime 30 candele
-        lookback = 30
-        fvgs = []
+        # Estrai prezzi setup (assicurandosi che siano scalari)
+        b_open = to_f(breakout_candle['Open'])
+        b_close = to_f(breakout_candle['Close'])
+        b_high = to_f(breakout_candle['High'])
+        b_low = to_f(breakout_candle['Low'])
         
-        # Scan ultimi periodi per trovare FVG non mitigati
-        for i in range(len(df)-lookback, len(df)-2):
-            c1 = df.iloc[i]
-            c2 = df.iloc[i+1] # Gap candle
-            c3 = df.iloc[i+2]
+        r_open = to_f(reversal_candle['Open'])
+        r_close = to_f(reversal_candle['Close'])
+        r_high = to_f(reversal_candle['High'])
+        r_low = to_f(reversal_candle['Low'])
+
+        # BEARISH TBS (Short) - Ricerca di uno Swing High precedente
+        pivot_high = to_f(recent_df['High'].max())
+        
+        # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
+        # Usiamo .iloc[:, 0] se è un DataFrame per evitare ambiguità
+        high_vals = recent_df['High']
+        if isinstance(high_vals, pd.DataFrame): high_vals = high_vals.iloc[:, 0]
+        
+        touches_high = int((high_vals >= pivot_high * 0.99).sum())
+        is_high_prob_consolidation = touches_high >= 2
+        
+        # Check volume breakout: Il volume della trappola era superiore alla media?
+        if 'Volume' in breakout_candle and avg_vol_20 > 0:
+            high_volume_breakout = to_b(breakout_candle['Volume'] > avg_vol_20)
+        else:
+            high_volume_breakout = False
+        
+        # Regola Bearish:
+        # 1. Breakout candle rompe al rialzo e CHIUDE SOPRA il pivot_high
+        is_breakout_up = to_b(b_close > pivot_high) and to_b(b_open < b_close)
+        
+        # Calculate tentative risk early for strength check
+        tentative_risk_bearish = max(b_high, r_high) - r_close
+        if tentative_risk_bearish <= 0: tentative_risk_bearish = r_close * 0.01
+
+        # 2. Reversal candle inverte e CHIUDE SOTTO il pivot_high (Tarta Soup) in modo forte
+        is_reversal_down = to_b(r_close < (pivot_high - tentative_risk_bearish * 0.1)) and to_b(r_close < r_open)
+
+        if is_breakout_up and is_reversal_down:
+            sl = max(b_high, r_high)
+            risk = sl - r_close
+            # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
+            min_risk = r_close * 0.003
+            if risk < min_risk:
+                risk = min_risk
+                sl = r_close + risk
+            tp = r_close - (risk * 3)
             
-            if type_direction == 'bearish':
-                # Cerchiamo Bearish FVG (per shortare dopo sweep high)
-                # Bearish FVG: Low[i] > High[i+2]
-                if c1['Low'] > c3['High']:
-                    top = c1['Low']
-                    bottom = c3['High']
-                    fvgs.append((top, bottom))
-            else:
-                 # Bullish FVG
-                 if c1['High'] < c3['Low']:
-                     bottom = c1['High']
-                     top = c3['Low']
-                     fvgs.append((top, bottom))
+            # Entry Validation Rule: Did the reversal candle also break the low of the breakout candle?
+            is_validated = r_close < b_low or r_low < b_low
+            confluence_level = "TBS VALIDATED" if is_validated else "TBS"
+            
+            # Dinamic Diamond Score
+            # Se ha consolidato E rompe con volumi alti, è un pattern d'élite.
+            diamond_score = "A++" if (to_b(is_high_prob_consolidation) and to_b(high_volume_breakout)) else "A"
+            if not is_high_prob_consolidation and not high_volume_breakout:
+                diamond_score = "B" # Setup base
+                
+            # Calcola quanto è grande il corpo rispetto al range totale
+            body_size = abs(r_close - r_open)
+            total_range = r_high - r_low
+            body_ratio = body_size / total_range if total_range > 0 else 0
+            if body_ratio > 0.6:
+                diamond_score = "A+++"
+
+            return {
+                "symbol": ticker,
+                "timeframe": tf,
+                "type": "bearish_tbs",
+                "subtype": "tbs_setup",
+                "range_high": pivot_high,
+                "range_low": to_f(recent_df['Low'].min()),
+                "price": r_close,
+                "entry_price": r_close,
+                "result": None,
+                "is_active": True,
+                "stop_loss": round(sl, 2),
+                "take_profit": round(tp, 2),
+                "rr_ratio": 3.0,
+                "liquidity_tier": "Daily",
+                "session_tag": "TBS Pattern",
+                "has_divergence": False,
+                "seasonality_score": 0,
+                "diamond_score": diamond_score,
+                "confluence_level": confluence_level,
+                "fvg_detected": False,
+                "hitting_fvg": False,
+                "smt_divergence": False,
+                "adr_percent": 0,
+                "rel_volume": int(breakout_candle['Volume'] / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
+                "volatility_warning": False,
+                "is_golden_wick": False,
+                "touches": int(touches_high),
+                "market_bias": None,
+                "max_favorable_excursion": 0.0
+            }
+
+        # BULLISH TBS (Long) - Ricerca di uno Swing Low precedente
+        pivot_low = to_f(recent_df['Low'].min())
         
-        if not fvgs: return False
+        # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
+        low_vals = recent_df['Low']
+        if isinstance(low_vals, pd.DataFrame): low_vals = low_vals.iloc[:, 0]
+
+        touches_low = int((low_vals <= pivot_low * 1.01).sum())
+        is_high_prob_consolidation = touches_low >= 2
         
-        # Controlla se il massimo/minimo della candela sweep (ultima) entra in uno di questi FVG
-        curr = df.iloc[-1]
-        hit = False
+        # Check volume breakout: Il volume della trappola era superiore alla media?
+        if 'Volume' in breakout_candle and avg_vol_20 > 0:
+            high_volume_breakout = to_b(breakout_candle['Volume'] > avg_vol_20)
+        else:
+            high_volume_breakout = False
         
-        for top, bottom in fvgs:
-            if type_direction == 'bearish':
-                # Sweep High entra nel Bearish FVG
-                if curr['High'] >= bottom and curr['High'] <= (top * 1.01): # Tolleranza 1% sopra
-                    hit = True
-            else:
-                # Sweep Low entra nel Bullish FVG
-                if curr['Low'] <= top and curr['Low'] >= (bottom * 0.99):
-                    hit = True
+        # Regola Bullish:
+        # 1. Breakout candle rompe al ribasso e CHIUDE SOTTO il pivot_low
+        is_breakout_down = to_b(b_close < pivot_low) and to_b(b_open > b_close)
         
-        return hit
-    except:
-        return False
+        # Calculate tentative risk early for strength check
+        tentative_risk_bullish = r_close - min(b_low, r_low)
+        if tentative_risk_bullish <= 0: tentative_risk_bullish = r_close * 0.01
+
+        # 2. Reversal candle inverte e CHIUDE SOPRA il pivot_low in modo forte
+        is_reversal_up = to_b(r_close > (pivot_low + tentative_risk_bullish * 0.1)) and to_b(r_close > r_open)
+
+        if is_breakout_down and is_reversal_up:
+            sl = min(b_low, r_low)
+            risk = r_close - sl
+            # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
+            min_risk = r_close * 0.003
+            if risk < min_risk:
+                risk = min_risk
+                sl = r_close - risk
+            tp = r_close + (risk * 3)
+            
+            # Entry Validation Rule: Did the reversal candle also break the high of the breakout candle?
+            is_validated = r_close > b_high or r_high > b_high
+            confluence_level = "TBS VALIDATED" if is_validated else "TBS"
+            
+            # Dinamic Diamond Score
+            diamond_score = "A++" if (is_high_prob_consolidation and high_volume_breakout) else "A"
+            if not is_high_prob_consolidation and not high_volume_breakout:
+                diamond_score = "B" # Setup base
+                
+            # Calcola quanto è grande il corpo rispetto al range totale
+            body_size = abs(r_close - r_open)
+            total_range = r_high - r_low
+            body_ratio = body_size / total_range if total_range > 0 else 0
+            if body_ratio > 0.6:
+                diamond_score = "A+++"
+
+            return {
+                "symbol": ticker,
+                "timeframe": tf,
+                "type": "bullish_tbs",
+                "subtype": "tbs_setup",
+                "range_high": to_f(recent_df['High'].max()),
+                "range_low": pivot_low,
+                "price": r_close,
+                "entry_price": r_close,
+                "result": None,
+                "is_active": True,
+                "stop_loss": round(sl, 2),
+                "take_profit": round(tp, 2),
+                "rr_ratio": 3.0,
+                "liquidity_tier": "Daily",
+                "session_tag": "TBS Pattern",
+                "has_divergence": False,
+                "seasonality_score": 0,
+                "diamond_score": diamond_score,
+                "confluence_level": confluence_level,
+                "fvg_detected": False,
+                "hitting_fvg": False,
+                "smt_divergence": False,
+                "adr_percent": 0,
+                "rel_volume": int(breakout_candle['Volume'] / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
+                "volatility_warning": False,
+                "is_golden_wick": False,
+                "touches": int(touches_low),
+                "market_bias": None,
+                "max_favorable_excursion": 0.0
+            }
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Errore detect_tbs_setup per {ticker}: {e}")
+
+    return None
+
+def detect_crt_models(ticker, df, tf, config=None):
+    """
+    Rileva i 4 modelli classici CRT (Candle Range Theory) come da manuale.
+    Cerca una 'Mother Bar' direzionale seguita da una rottura del suo High/Low.
+    """
+    # Permettiamo allo scanner di analizzare sia il Daily che l'Orario
+    if tf not in ['1D', '1H']: return None
+    df = clean_df(df)
+    if df is None or len(df) < 15: return None
+
+    try:
+        # La candela che fa scattare l'alert è l'ultima (quella appena chiusa)
+        trigger = df.iloc[-1]
+        t_open, t_close, t_high, t_low = to_f(trigger['Open']), to_f(trigger['Close']), to_f(trigger['High']), to_f(trigger['Low'])
+
+        # Calcoliamo la dimensione media del corpo per assicurarci che la Mother Bar sia una "vera" candela forte
+        avg_body = df['Close'].diff().abs().rolling(14).mean().iloc[-2]
+
+        # Cerchiamo la Mother Bar nelle ultime 6 candele
+        for i in range(2, 7): 
+            mb = df.iloc[-i]
+            mb_open, mb_close, mb_high, mb_low = to_f(mb['Open']), to_f(mb['Close']), to_f(mb['High']), to_f(mb['Low'])
+            mb_body = abs(mb_close - mb_open)
+
+            # Filtro: La Mother bar deve essere abbastanza grande (non una doji)
+            if mb_body < (avg_body * 0.7):
+                continue
+
+            intermediate_candles = df.iloc[-i+1:-1]
+            num_candles = i  # Numero totale di candele nel pattern (MB + Intermedie + Trigger)
+
+            # --- SETUP LONG (Bullish CRT) ---
+            # La Mother Bar è ribassista (Nera nell'immagine), e noi rompiamo il suo High
+            if mb_close < mb_open: 
+                crt_high = mb_high
+                crt_low = mb_low
+
+                # Condizione di innesco: La candela attuale chiude in modo deciso sopra il CRT High
+                if t_close > crt_high:
+                    valid = True
+                    has_inside_bar = False
+
+                    # Analizziamo le candele in mezzo
+                    for _, row in intermediate_candles.iterrows():
+                        # Se una candela intermedia CHIUDE sotto il CRT Low, il pattern è invalidato
+                        if to_f(row['Close']) < crt_low:
+                            valid = False
+                            break
+                        # Check se c'è un Inside Bar
+                        if to_f(row['High']) <= mb_high and to_f(row['Low']) >= mb_low:
+                            has_inside_bar = True
+
+                    if valid:
+                        # Classifichiamo i 4 Modelli esatti dall'immagine
+                        model_name = "Multiple Candle CRT"
+                        if num_candles == 2: model_name = "2 Candle CRT"
+                        elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
+                        elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
+
+                        # Stop Loss calcolato sul punto più basso dell'intera formazione strutturale
+                        sl = min([crt_low, t_low] + [to_f(r['Low']) for _, r in intermediate_candles.iterrows()])
+                        risk = t_close - sl
+                        
+                        # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
+                        if risk < t_close * 0.003:
+                            risk = t_close * 0.003
+                            sl = t_close - risk
+                            
+                        tp = t_close + (risk * 3)
+
+                        return create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+
+            # --- SETUP SHORT (Bearish CRT) ---
+            # La Mother Bar è rialzista, e noi rompiamo il suo Low
+            elif mb_close > mb_open:
+                crt_high = mb_high
+                crt_low = mb_low
+
+                if t_close < crt_low:
+                    valid = True
+                    has_inside_bar = False
+
+                    for _, row in intermediate_candles.iterrows():
+                        if to_f(row['Close']) > crt_high:
+                            valid = False
+                            break
+                        if to_f(row['High']) <= mb_high and to_f(row['Low']) >= mb_low:
+                            has_inside_bar = True
+
+                    if valid:
+                        model_name = "Multiple Candle CRT"
+                        if num_candles == 2: model_name = "2 Candle CRT"
+                        elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
+                        elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
+
+                        sl = max([crt_high, t_high] + [to_f(r['High']) for _, r in intermediate_candles.iterrows()])
+                        risk = sl - t_close
+                        
+                        # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
+                        if risk < t_close * 0.003:
+                            risk = t_close * 0.003
+                            sl = t_close + risk
+                            
+                        tp = t_close - (risk * 3)
+
+                        return create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Errore detect_crt_models per {ticker}: {e}")
+
+    return None
+
+def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, touches):
+    return {
+        "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
+        "range_high": high, "range_low": low, "price": price, "entry_price": price,
+        "result": None, "is_active": True, "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
+        "rr_ratio": 3.0, "liquidity_tier": "CRT Framework", "session_tag": "Price Action",
+        "has_divergence": False, "seasonality_score": 0, "diamond_score": "A+" if touches <= 3 else "A",
+        "confluence_level": subtype, # Es: "Classic 3 Candle CRT"
+        "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
+        "rel_volume": 0, "volatility_warning": False, "is_golden_wick": False, "touches": touches,
+        "market_bias": None, "max_favorable_excursion": 0.0
+    }
+
+def analyze_market_context():
+    """Analizza indici principali e gli 11 settori S&P 500 per Rotazione Settoriale."""
+    
+    tickers_map = {
+        # Indici
+        'SPY': 'S&P 500', 'QQQ': 'Nasdaq', 'IWM': 'Russell 2000',
+        # Settori
+        'XLK': 'Technology', 'XLF': 'Financials', 'XLV': 'Health Care',
+        'XLY': 'Consumer Discr', 'XLC': 'Communication', 'XLI': 'Industrials',
+        'XLP': 'Consumer Staples', 'XLE': 'Energy', 'XLB': 'Materials',
+        'XLRE': 'Real Estate', 'XLU': 'Utilities'
+    }
+    
+    ticker_list = list(tickers_map.keys())
+    
+    try:
+        # Scarica 1 mese di dati per tutti in una sola chiamata
+        data = yf.download(ticker_list, period="1mo", interval="1d", progress=False, group_by='ticker')
+        
+        analysis = {"indices": {}, "sectors": {}}
+        sector_momentum = {}
+        
+        for ticker, name in tickers_map.items():
+            if ticker in data and not data[ticker].empty:
+                df = data[ticker].dropna()
+                if len(df) < 20: continue
+                
+                # Calcoli
+                sma20 = df['Close'].rolling(window=20).mean().iloc[-1]
+                curr_price = float(df['Close'].iloc[-1])
+                
+                # Prezzo di una settimana fa (5 giorni lavorativi fa)
+                if len(df) >= 6:
+                    price_5d_ago = float(df['Close'].iloc[-6])
+                else:
+                    price_5d_ago = float(df['Close'].iloc[0])
+                
+                # Bias (Sopra/Sotto SMA 20)
+                bias = 'BULLISH' if curr_price > sma20 else 'BEARISH'
+                
+                # Momentum (% di crescita negli ultimi 5 giorni)
+                momentum_pct = ((curr_price - price_5d_ago) / price_5d_ago) * 100
+                
+                info = {
+                    "bias": bias,
+                    "momentum_pct": round(momentum_pct, 2)
+                }
+                
+                if ticker in ['SPY', 'QQQ', 'IWM']:
+                    analysis["indices"][ticker] = info
+                else:
+                    analysis["sectors"][name] = info
+                    sector_momentum[name] = momentum_pct
+        
+        # Determina i settori Leader e Laggard (I 3 più forti e i 3 più deboli)
+        sorted_sectors = sorted(sector_momentum.items(), key=lambda x: x[1], reverse=True)
+        top_3 = [s[0] for s in sorted_sectors[:3]]
+        bottom_3 = [s[0] for s in sorted_sectors[-3:]]
+        
+        # Bias Globale basato su SPY e QQQ
+        global_bias = 'NEUTRAL'
+        spy_info = analysis["indices"].get('SPY', {})
+        qqq_info = analysis["indices"].get('QQQ', {})
+        
+        if spy_info.get('bias') == 'BULLISH' and qqq_info.get('bias') == 'BULLISH':
+            global_bias = 'BULLISH'
+        elif spy_info.get('bias') == 'BEARISH' and qqq_info.get('bias') == 'BEARISH':
+            global_bias = 'BEARISH'
+            
+        return {
+            "global_bias": global_bias,
+            "top_sectors": top_3,
+            "bottom_sectors": bottom_3,
+            "details": analysis
+        }
+        
+    except Exception as e:
+        logger.error(f"Errore analisi settoriale: {e}")
+        return {"global_bias": "NEUTRAL", "top_sectors": [], "bottom_sectors": [], "details": {}}
+
+
+
 
 def validate_existing_signals(ticker, df, active_signals_map):
     """
@@ -670,6 +925,19 @@ def validate_existing_signals(ticker, df, active_signals_map):
     curr_close = float(curr_candle['Close'])
 
     for sig in signals:
+        # Previeni la chiusura immediata se il segnale è stato creato OGGI.
+        # Spiegazione: La candela Daily di oggi contiene il "sweep" che ha generato il segnale.
+        # Se controlliamo la stessa candela per lo SL, lo colpirà quasi sempre (perché lo SL è sul minimo/massimo del sweep).
+        try:
+            # Preveniamo la chiusura immediata se il segnale è stato creato OGGI.
+            # Usiamo [:10] per estrarre la data (YYYY-MM-DD) indipendentemente dal separatore (spazio o 'T')
+            signal_date = str(sig['created_at'])[:10]
+            candle_date = curr_candle.name.strftime('%Y-%m-%d')
+            if signal_date == candle_date:
+                continue
+        except Exception as e:
+            pass
+
         # Se il segnale è 'attivo' nel DB (lo abbiamo filtrato prima)
         sl = float(sig['stop_loss'])
         tp = float(sig['take_profit'])
@@ -710,17 +978,17 @@ def validate_existing_signals(ticker, df, active_signals_map):
 
 def check_open_trades():
     """
-    Controlla tutti i trade 'OPEN' nel database e verifica se hanno colpito TP o SL.
+    Controlla tutti i trade 'OPEN' nel database usando dati DAILY (molto più veloce).
     """
     try:
-        response = supabase.table('crt_signals').select("*").eq('result', 'OPEN').execute()
+        response = supabase.table('crt_signals').select("*").or_("result.eq.OPEN,result.is.null").execute()
         open_signals = response.data
         
         if not open_signals:
             logger.info("Nessun trade OPEN da validare.")
             return
 
-        logger.info(f"Validazione di {len(open_signals)} trade OPEN...")
+        logger.info(f"Validazione di {len(open_signals)} trade OPEN (Modalità Daily)...")
         updates_count = 0
         
         symbols = list(set([s['symbol'] for s in open_signals]))
@@ -729,7 +997,9 @@ def check_open_trades():
             tickers_str = " ".join(symbols)
             if not tickers_str: return
             
-            curr_data = yf.download(tickers_str, period="1d", interval="1m", progress=False, group_by='ticker')
+            # OTTIMIZZAZIONE: Usiamo interval="1d" invece di "1m". 
+            # Per trade Macro, basta sapere se High/Low di oggi ha toccato i livelli.
+            curr_data = yf.download(tickers_str, period="5d", interval="1d", progress=False, group_by='ticker')
             
             for signal in open_signals:
                 try:
@@ -741,23 +1011,43 @@ def check_open_trades():
                         if sym not in curr_data.columns.get_level_values(0):
                             continue
                         df = curr_data[sym]
-                        
+                    
+                    df = df.dropna()
                     if df.empty: continue
                     
+                    # Prendi l'ultima candela disponibile (Oggi o Ieri chiusa)
                     last_candle = df.iloc[-1]
                     curr_high = float(last_candle['High'])
                     curr_low = float(last_candle['Low'])
-                    
                     result = None
+                    if signal.get('stop_loss') is None or signal.get('take_profit') is None:
+                        continue
+                        
+                    # Salta la chiusura immediata SOLO se è un trade Daily.
+                    # Se è un trade 1H, vogliamo validarlo anche se è lo stesso giorno!
+                    try:
+                        if signal.get('timeframe') == '1D':
+                            signal_date = str(signal['created_at'])[:10]
+                            candle_date = last_candle.name.strftime('%Y-%m-%d')
+                            if signal_date == candle_date:
+                                continue
+                    except Exception as e:
+                        pass
+
                     sl = float(signal['stop_loss'])
                     tp = float(signal['take_profit'])
                     
-                    if 'bearish' in signal['type'] or 'bearish' in str(signal.get('subtype', '')):
+                    # Logica: Controlliamo se High o Low della giornata hanno colpito i livelli
+                    if 'bearish' in signal['type']:
+                        # Short: Stop Loss se il prezzo SALE (High >= SL)
                         if curr_high >= sl: result = 'LOSS'
+                        # Short: Take Profit se il prezzo SCENDE (Low <= TP)
                         elif curr_low <= tp: result = 'WIN'
                             
-                    elif 'bullish' in signal['type'] or 'bullish' in str(signal.get('subtype', '')):
+                    elif 'bullish' in signal['type']:
+                        # Long: Stop Loss se il prezzo SCENDE (Low <= SL)
                         if curr_low <= sl: result = 'LOSS'
+                        # Long: Take Profit se il prezzo SALE (High >= TP)
                         elif curr_high >= tp: result = 'WIN'
                     
                     if result:
@@ -795,22 +1085,30 @@ def main():
     logger.info("Inizio scansione CRT Flow...")
     start_time = time.time()
     
-    # 1. Analisi Bias di Mercato
-    market_bias = analyze_market_context()
-    logger.info(f"Global Market Bias: {market_bias}")
+    # 0. Retry Uploads
+    retry_failed_uploads()
     
-    # Save Market Bias to DB for Frontend
+    # 1. Analisi Bias di Mercato (Rotazione Settoriale)
+    market_context = analyze_market_context()
+    market_bias = market_context["global_bias"]
+    logger.info(f"Global Market Bias: {market_bias}")
+    logger.info(f"Leading Sectors: {market_context.get('top_sectors', [])}")
+    
+    # Save Market Context to DB for Frontend
     try:
         bias_signal = {
             "symbol": "_MARKET_STATUS_", # Special Ticker
             "timeframe": "1D",
             "type": "market_bias",
-            "session_tag": market_bias, # Store bias here 'BULLISH', 'BEARISH', 'NEUTRAL'
+            # Salviamo il bias globale qui per retrocompatibilità
+            "session_tag": market_bias, 
             "is_active": True,
-            "detected_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()),
+            "created_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()),
             "price": 0,
             "range_high": 0,
             "range_low": 0,
+            # Trasformiamo l'intero dizionario in una stringa JSON e lo salviamo nel campo 'subtype'
+            "subtype": json.dumps(market_context),
             "liquidity_tier": "Status",
             "rr_ratio": 0
         }
@@ -885,120 +1183,138 @@ def main():
 
     # Unione liste e rimozione duplicati
     tickers = list(set(all_tickers))
-    logger.info(f"Totale Ticker unici da analizzare: {len(tickers)}")
-    chunk_size = 50 # Processiamo 50 ticker alla volta
+    logger.info(f"Totale Ticker unici iniziali: {len(tickers)}")
+    
+    # --- FILTRO MARKET CAP (< 10B) ---
+    logger.info("Filtro Market Cap in corso... (Minimo 10B)")
+    import concurrent.futures
+    
+    def check_mcap(t):
+        try:
+            mcap = yf.Ticker(t).fast_info.get("marketCap", 0)
+            return t if mcap >= 10_000_000_000 else None
+        except:
+            return None
+
+    filtered_tickers = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        for result in executor.map(check_mcap, tickers):
+            if result:
+                filtered_tickers.append(result)
+                
+    tickers = filtered_tickers
+    logger.info(f"Ticker rimanenti dopo filtro Market Cap (>= 10B): {len(tickers)}")
+    if not tickers:
+        logger.warning("Nessun ticker ha superato il filtro Market Cap. Esco.")
+        return
     
     all_detected_signals = []
     expired_signals_updates = []
 
-    # Iteriamo per blocchi di ticker
-    for i in range(0, len(tickers), chunk_size):
-        chunk = tickers[i : i + chunk_size]
-        logger.info(f"Elaborazione blocco {i//chunk_size + 1} ({len(chunk)} ticker)...")
+    for tf, cfg in TF_CONFIG.items():
+        logger.info(f"=== Avvio scansione per Timeframe: {tf} ===")
+        logger.info(f"Scaricamento dati in blocco (Bulk)...")
+        try:
+            # Download data for all tickers at once
+            data = yf.download(
+                tickers, 
+                period=cfg['period'], 
+                interval=cfg['interval'], 
+                group_by='ticker', 
+                threads=True, 
+                progress=False
+            )
+        except Exception as down_err:
+            logger.error(f"Errore critico yfinance bulk download (TF {tf}): {down_err}")
+            continue
 
-        for tf, cfg in TF_CONFIG.items():
+        if data.empty:
+            logger.warning(f"Nessun dato scaricato da yfinance per TF {tf}.")
+            continue
+            
+        logger.info(f"Download completato TF {tf}. Elaborazione {len(tickers)} ticker...")
+
+        for ticker in tickers:
             try:
-                # Download batch per il timeframe corrente
-                try:
-                    data = yf.download(
-                        chunk, 
-                        period=cfg['period'], 
-                        interval=cfg['interval'], 
-                        group_by='ticker', 
-                        threads=True, 
-                        progress=False
-                    )
-                except Exception as down_err:
-                    logger.error(f"Errore yfinance download: {down_err}")
+                # Estrazione dati per il singolo ticker dal DataFrame MultiIndex
+                if len(tickers) == 1:
+                    df = data
+                else:
+                    if ticker not in data.columns.get_level_values(0):
+                        continue
+                    df = data[ticker]
+                
+                df = df.dropna()
+                if df.empty or df['Close'].isnull().all():
                     continue
+                
+                # FILTRO PENNY STOCK (Obbligatorio)
+                try:
+                    current_close = float(df['Close'].iloc[-1])
+                    if current_close < 5.00:
+                        continue
+                except:
+                    pass
 
-                if data.empty: continue
-
-                for ticker in chunk:
-                    # Estrazione dati per ticker singolo dal dataframe multi-indice
-                    # Yfinance ritorna dataframe diversi se 1 ticker o N ticker
-                    if len(chunk) == 1:
-                        df = data
-                    else:
-                        if ticker not in data.columns.get_level_values(0):
-                            continue
-                        df = data[ticker]
-                    
-                    df = df.dropna()
-                    if df.empty: continue
-                    
-                    # FILTRO PENNY STOCK (Obbligatorio)
-                    # Se il prezzo attuale (ultima Close) è < 5.00, salta perchè è "spazzatura"
-                    try:
-                        current_close = float(df['Close'].iloc[-1])
-                        if current_close < 5.00:
-                            continue
-                    except:
-                        pass
-
-                    # A. Validazione Segnali Esistenti (Solo su 1D o timeframe corrente appropriato)
-                    # Per semplicità validiamo ogni volta che abbiamo dati freschi
+                # A. Validazione Segnali Esistenti 
+                updates = []
+                if tf == "1D":
                     updates = validate_existing_signals(ticker, df, active_signals_map)
                     expired_signals_updates.extend(updates)
 
-                    # B. Detection nuovi segnali
-                    # 4. Core Logic Detection (Passing Config)
-                    signal = detect_crt_logic(ticker, df, tf, scanner_config)
-                    if signal:
-                        all_detected_signals.append(signal)
-                        logger.info(f"*** SEGNALE TROVATO: {ticker} [{tf}] - {signal['type']} ***")
-                        # Check contro-trend
-                        if (market_bias == 'BULLISH' and signal['type'] == 'bearish_sweep') or \
-                           (market_bias == 'BEARISH' and signal['type'] == 'bullish_sweep'):
-                           # Potremmo flaggarlo o scartarlo. Per ora lo teniamo ma potremmo aggiungere un campo 'warning'
-                           pass
-                        
-                        # --- ALERT LOGIC ---
-                        is_major = signal['liquidity_tier'] == 'Major'
-                        is_good_setup = signal['timeframe'] in ['4H', '1D'] and signal['rr_ratio'] >= 2.0
-                        
-                        if is_major or is_good_setup:
-                             send_telegram_alert(signal, market_bias)
-                        # -------------------
+                # --- 🛑 FILTRO ANTI-SPAM (ONE ACTIVE TRADE POLICY) ---
+                # Vogliamo sapere se questo ticker ha un trade ancora in corso
+                has_active_trade = False
+                if ticker in active_signals_map:
+                    # Prendiamo gli ID dei segnali che sono appena scaduti in questo esatto ciclo
+                    expired_ids = [u['id'] for u in updates]
+                    
+                    # Controlliamo se tra i segnali attivi ce n'è almeno uno che NON è appena scaduto
+                    for sig in active_signals_map[ticker]:
+                        if sig['id'] not in expired_ids:
+                            has_active_trade = True
+                            break
+                
+                # Se il ticker ha un trade già aperto, skippiamo TUTTE le detection e passiamo al prossimo asset
+                if has_active_trade:
+                    # De-commenta il logger qui sotto se vuoi vedere nel terminale i ticker ignorati
+                    # logger.info(f"Skipping {ticker}: Trade già in corso.") 
+                    continue
+                # -----------------------------------------------------
 
-                        all_detected_signals.append(signal)
+                # B. Detection nuovi segnali
+                signal = detect_macro_sweep(ticker, df, tf, scanner_config)
+                if signal:
+                    signal['session_tag'] = f"Sweep - Bias {market_bias}"
+                    signal['market_bias'] = market_bias
+                    all_detected_signals.append(signal)
+                    logger.info(f"*** SEGNALE TROVATO [{tf}]: {ticker} [{signal['liquidity_tier']} Sweep] - {signal['type']} ***")
+                    
+                    # --- ALERT LOGIC ---
+                    is_major = signal['liquidity_tier'] in ['Quarterly', 'Monthly', 'Semi_annual']
+                    if is_major or signal['diamond_score'] in ['A++', 'GOD_MODE']:
+                        pass # send_telegram_alert(signal, market_bias)
+                    # -------------------
 
-                    # 2. Se siamo nel ciclo 1H, facciamo resample a 4H internamente
-                    if tf == "1H" and not df.empty:
-                        try:
-                            df_4h = df.resample('4h').agg({
-                                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-                            }).dropna()
-                            sig_4h = detect_crt_logic(ticker, df_4h, "4H")
-                            if sig_4h: 
-                                 # Alert Logic for 4H
-                                 if sig_4h['rr_ratio'] >= 2.0:
-                                     send_telegram_alert(sig_4h, market_bias)
-                                 all_detected_signals.append(sig_4h)
-                        except Exception as e:
-                           pass
+                # C. Detection TBS Pattern
+                tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config)
+                if tbs_signal:
+                    tbs_signal['session_tag'] = f"TBS - Bias {market_bias}"
+                    tbs_signal['market_bias'] = market_bias
+                    all_detected_signals.append(tbs_signal)
+                    logger.info(f"*** SEGNALE TBS TROVATO [{tf}]: {ticker} - {tbs_signal['type']} (Score: {tbs_signal.get('diamond_score', 'B')}) ***")
+                    # send_telegram_alert(tbs_signal, market_bias)
 
-                    # 3. Resample 3M -> 12M (Yearly / God View)
-                    if tf == "3M" and not df.empty:
-                        try:
-                            # Resample to Yearly (YE = Year End)
-                            df_12m = df.resample('YE').agg({
-                                'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-                            }).dropna()
-                            sig_12m = detect_crt_logic(ticker, df_12m, "12M")
-                            if sig_12m: 
-                                 # Always Trend/Alert for Yearly (God View)
-                                 send_telegram_alert(sig_12m, market_bias)
-                                 all_detected_signals.append(sig_12m)
-                        except Exception as e:
-                           pass
+                # D. Detection 4 Models CRT
+                crt_signal = detect_crt_models(ticker, df, tf, scanner_config)
+                if crt_signal:
+                    crt_signal['market_bias'] = market_bias
+                    all_detected_signals.append(crt_signal)
+                    logger.info(f"*** SEGNALE CRT TROVATO [{tf}]: {ticker} - {crt_signal['subtype']} ***")
 
             except Exception as e:
-                logger.error(f"Errore download batch {tf}: {e}")
-        
-        # Pausa di cortesia per evitare rate limiting
-        time.sleep(1)
-
+                logger.error(f"Errore elaborazione ticker {ticker} su {tf}: {e}")
+            
     # 4. SALVATAGGIO SU SUPABASE
     
     # A. Aggiornamento segnali scaduti
@@ -1033,29 +1349,50 @@ def main():
     # B. Inserimento nuovi segnali (Sempre come attivi)
     if all_detected_signals:
         try:
-            logger.info(f"Trovati {len(all_detected_signals)} NUOVI segnali. Inserimento...")
-            
-            # Qui NON resettiamo più TUTTI i segnali vecchi a false, perché abbiamo la logica di scadenza intelligente.
-            # MA dobbiamo evitare duplicati: se esiste già un segnale attivo per Ticker+TF+Type uguale a oggi, non inserire.
-            # Per semplicità, disattiviamo i segnali PRECEDENTI dello STESSO TIPO e TF per quel ticker, se ne troviamo uno nuovo.
-            # (Logica "New Signal Invalidates Old Setup" - Opzionale, ma pulita)
-            
-            # Inserimento massivo con Fallback
-            for j in range(0, len(all_detected_signals), 1000):
-                batch = all_detected_signals[j : j + 1000]
-                try:
-                    supabase.table("crt_signals").insert(batch).execute()
-                except Exception as e:
-                    if "price" in str(e) or "column" in str(e):
-                        logger.warning("Colonna 'price' mancante nel DB. Riprovo in modalita compatibilita (senza prezzo)...")
-                        batch_no_price = [{k: v for k, v in s.items() if k != 'price'} for s in batch]
-                        supabase.table("crt_signals").insert(batch_no_price).execute()
-                    else:
+            # --- FILTRO DUPLICATI GIORNALIERI ---
+            # Evitiamo di inserire lo stesso segnale (Ticker + TF + Type) se è già stato creato oggi
+            try:
+                # Fetch minimal data of signals created today
+                # Usiamo il formato ISO (T00:00:00.000Z) per compatibilità ottimale con Supabase/Postgres
+                today_date = time.strftime('%Y-%m-%d', time.gmtime())
+                existing_today = supabase.table("crt_signals").select("symbol, timeframe, type").gte("created_at", f"{today_date}T00:00:00.000Z").execute()
+                existing_set = set()
+                if existing_today.data:
+                    for s in existing_today.data:
+                        existing_set.add((s['symbol'], s['timeframe'], s['type']))
+                
+                # Filter out what we already have
+                new_unique_signals = []
+                # We also track what we are about to insert to avoid duplicates internal to this run
+                seen_in_run = set()
+                
+                for sig in all_detected_signals:
+                    key = (sig['symbol'], sig['timeframe'], sig['type'])
+                    if key not in existing_set and key not in seen_in_run:
+                        new_unique_signals.append(sig)
+                        seen_in_run.add(key)
+                
+                all_detected_signals = new_unique_signals
+            except Exception as e:
+                logger.error(f"Errore durante il filtraggio duplicati: {e}")
+
+            if not all_detected_signals:
+                logger.info("Nessun NUOVO segnale unico da inserire (tutti già presenti oggi).")
+            else:
+                logger.info(f"Inserimento di {len(all_detected_signals)} segnali unici su Supabase...")
+                # Inserimento massivo con Fallback
+                for j in range(0, len(all_detected_signals), 1000):
+                    batch = all_detected_signals[j : j + 1000]
+                    try:
+                        supabase.table("crt_signals").insert(batch).execute()
+                    except Exception as e:
                         logger.error(f"Errore insert batch: {e}")
-            
-            logger.info("Database aggiornato con successo.")
+                        logger.info("Tentativo salvataggio locale per questo batch...")
+                        save_failed_signals(batch)
+                
+                logger.info("Database aggiornato con successo.")
         except Exception as e:
-            logger.error(f"Errore durante l'upload su Supabase: {e}")
+            logger.error(f"Errore generale durante l'upload su Supabase: {e}")
     else:
         logger.info("Nessun NUOVO segnale rilevato in questa scansione.")
 
