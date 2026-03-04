@@ -3,7 +3,7 @@ name: CRT Flow Intraday Scanner
 on:
   schedule:
     # Gira al minuto 5 di ogni ora, dalle 14:00 UTC (15:05 ITA) alle 21:00 UTC (22:05 ITA), lun-ven
-    - cron: '5 14-21 * * 1-5'
+    - cron: '5 9-21 * * 1-5'
   workflow_dispatch: # Ti permette di avviarlo a mano con un click per testare
 
 jobs:
