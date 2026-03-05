@@ -15,15 +15,20 @@ from notifications import send_telegram_alert
 from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence
 
 # 1. CONFIGURAZIONE LOGGING
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("scanner.log"),
-        logging.StreamHandler()
-    ]
-)
+# Use a custom setup to ensure UTF-8 encoding on Windows
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+# File Handler with UTF-8
+file_handler = logging.FileHandler("scanner.log", encoding='utf-8')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Console Handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 # 2. CARICAMENTO VARIABILI D'AMBIENTE
 # Carica .env.local solo se esiste (sviluppo locale)
@@ -44,6 +49,23 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 2B. Admin Console Logging System
+def admin_log(level, message):
+    """Invia i log alla tabella system_logs per la visualizzazione Realtime nel Dashboard."""
+    try:
+        supabase.table("system_logs").insert({
+            "level": level,
+            "message": message,
+            "source": "scanner_bot"
+        }).execute()
+        # Manteniamo anche il log locale
+        if level == "ERROR": logger.error(message)
+        elif level == "WARNING": logger.warning(message)
+        else: logger.info(message)
+    except Exception as e:
+        print(f"[LOG ERROR] Database logging failed: {e}")
+        logger.error(message)
 
 # 3. CONFIGURAZIONE TIMEFRAME
 TF_CONFIG = {
@@ -112,6 +134,30 @@ def get_nasdaq100_tickers():
     except Exception as e:
         logger.error(f"Errore nel recupero ticker NASDAQ 100: {e}")
         return []
+
+def get_forex_tickers():
+    """Ritorna la lista dei principali cambi Forex per yfinance."""
+    return [
+        "EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", 
+        "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X"
+    ]
+
+def get_crypto_tickers():
+    """Ritorna la lista delle principali Crypto per yfinance."""
+    return [
+        "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD", 
+        "DOGE-USD", "AVAX-USD", "DOT-USD", "LINK-USD"
+    ]
+
+def has_reliable_volume(ticker):
+    """
+    Determina se il volume di yfinance è affidabile per questo asset.
+    Forex (=X) e Crypto (-USD) hanno volumi frammentati/unreliable in yfinance.
+    """
+    t = str(ticker).upper()
+    if "=X" in t or "-USD" in t:
+        return False
+    return True
 
 def get_russell2000_tickers():
     """Recupera la lista Russell 2000 dal file CSV locale (IWM_holdings.csv)."""
@@ -286,6 +332,7 @@ def detect_macro_sweep(ticker, df, tf, config=None):
         return None
 
     try:
+        results = []
         # --- 1. DATA AGGREGATION (RESAMPLING) ---
         agg_map = {'High': 'max', 'Low': 'min', 'Close': 'last', 'Open': 'first'}
         
@@ -293,6 +340,12 @@ def detect_macro_sweep(ticker, df, tf, config=None):
         df_w = df.resample('W').agg(agg_map).dropna()
         if len(df_w) < 2: return None
         prev_w = df_w.iloc[-2]
+
+        # Daily (PDH/PDL for 1H timeframes)
+        prev_d = None
+        if tf == '1H':
+            df_d = df.resample('D').agg(agg_map).dropna()
+            if len(df_d) >= 2: prev_d = df_d.iloc[-2]
 
         # Monthly (ME = Month End)
         df_m = df.resample('ME').agg(agg_map).dropna() 
@@ -423,7 +476,7 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  sl = c_low
                  risk = c_close - sl
                  # NUOVO CODICE (Intraday Risk Sizing)
-                 min_risk = c_close * 0.006
+                 min_risk = c_close * 0.015
                  
                  if risk < min_risk:
                      sl = c_close - min_risk
@@ -493,16 +546,29 @@ def detect_macro_sweep(ticker, df, tf, config=None):
         if prev_q is not None:
             sig = check_sweep("quarterly", prev_q['High'], prev_q['Low'], "GOD_MODE")
             if sig: return sig
+                    # 2. Monthly Sweep (A++)
+            if prev_m is not None:
+                sig = check_sweep("monthly", to_f(prev_m['High']), to_f(prev_m['Low']), "A++")
+                if sig: results.append(sig)
             
-        # 2. Monthly Sweep (A++)
-        if prev_m is not None:
-            sig = check_sweep("monthly", prev_m['High'], prev_m['Low'], "A++")
-            if sig: return sig
-            
-        # 3. Weekly Sweep (A)
-        # Solo se non abbiamo già trovato roba più grossa
-        sig = check_sweep("weekly", prev_w['High'], prev_w['Low'], "A")
-        if sig: return sig
+        # --- 3. CHECK EVERY LEVEL ---
+        
+        # PWH/PWL
+        res_w = check_sweep("weekly", to_f(prev_w['High']), to_f(prev_w['Low']), "A")
+        if res_w: results.append(res_w)
+
+        # PDH/PDL (Only 1H)
+        if prev_d is not None:
+             res_d = check_sweep("daily", to_f(prev_d['High']), to_f(prev_d['Low']), "B")
+             if res_d: results.append(res_d)
+
+        # Return the best signal based on diamond_score
+        if results:
+            # Define a mapping for diamond_score to a numerical value for sorting
+            score_map = {"A+++": 5, "A++": 4, "A+": 3, "A": 2, "B": 1}
+            # Sort by diamond_score (descending) and then by rr_ratio (descending)
+            results.sort(key=lambda x: (score_map.get(x['diamond_score'], 0), x['rr_ratio']), reverse=True)
+            return results[0]
 
     except Exception as e:
         pass
@@ -682,14 +748,14 @@ def detect_tbs_setup(ticker, df, tf, config=None):
             sl = min(b_low, r_low)
             risk = r_close - sl
             # NUOVO CODICE (Intraday Risk Sizing)
-            min_risk = r_close * 0.006
+            min_risk = r_close * 0.015
             if risk < min_risk:
                 risk = min_risk
                 sl = r_close - risk
 
             # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-            # Cerchiamo il massimo più alto delle ultime 80 candele orarie
-            lookback_window = df.iloc[-80:-1]
+            # Cerchiamo il massimo più alto delle ultime 25 candele orarie
+            lookback_window = df.iloc[-25:-1]
             structural_target = to_f(lookback_window['High'].max())
             
             # Il Take profit è il target strutturale
@@ -1199,7 +1265,7 @@ def main():
         except Exception:
             pass
 
-    logger.info("Inizio scansione CRT Flow...")
+    admin_log("INFO", "🚀 Avvio scansione CRT Flow...")
     start_time = time.time()
     
     # 0. Retry Uploads
@@ -1208,8 +1274,8 @@ def main():
     # 1. Analisi Bias di Mercato (Rotazione Settoriale)
     market_context = analyze_market_context()
     market_bias = market_context["global_bias"]
-    logger.info(f"Global Market Bias: {market_bias}")
-    logger.info(f"Leading Sectors: {market_context.get('top_sectors', [])}")
+    admin_log("INFO", f"Global Market Bias: {market_bias}")
+    admin_log("INFO", f"Leading Sectors: {', '.join(market_context.get('top_sectors', []))}")
     
     # Save Market Context to DB for Frontend
     try:
@@ -1297,6 +1363,10 @@ def main():
         all_tickers += get_nasdaq100_tickers()
     if scan_russell: 
         all_tickers += get_russell2000_tickers()
+    
+    # ALWAYS SCAN FOREX & CRYPTO (Asset Class Expansion)
+    all_tickers += get_forex_tickers()
+    all_tickers += get_crypto_tickers()
 
     # Unione liste e rimozione duplicati
     tickers = list(set(all_tickers))
@@ -1308,7 +1378,16 @@ def main():
     
     def check_mcap(t):
         try:
-            mcap = yf.Ticker(t).fast_info.get("marketCap", 0)
+            ticker_obj = yf.Ticker(t)
+            # Robust check for fast_info
+            if hasattr(ticker_obj, 'fast_info') and ticker_obj.fast_info:
+                try:
+                    mcap = ticker_obj.fast_info.get("marketCap", 0)
+                except:
+                    # In case fast_info is not subscriptable or no .get method
+                    mcap = 0
+            else:
+                mcap = 0
             return t if mcap >= 10_000_000_000 else None
         except:
             return None
@@ -1441,10 +1520,20 @@ def main():
                         continue
                         
                     all_detected_signals.append(signal)
-                    logger.info(f"*** SEGNALE TROVATO [{tf}]: {ticker} [{signal['liquidity_tier']} Sweep] - {signal['type']} (Score: A++) ***")
+                    admin_log("SUCCESS", f"💎 {ticker} [{tf}]: {signal['liquidity_tier']} Sweep - Score A++")
 
                 # C. Detection TBS Pattern
                 tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config)
+                if tbs_signal:
+                    # VOLUME BYPASS: Se l'asset non ha volumi affidabili, ignoriamo il filtro rvol
+                    rel_vol = tbs_signal.get('rel_volume', 0)
+                    rvol_threshold = float(scanner_config.get("rvol_threshold", 1.5))
+                    
+                    if has_reliable_volume(ticker):
+                        # Per gli Stock il volume deve essere alto
+                        if rel_vol < rvol_threshold:
+                            tbs_signal = None
+                    
                 if tbs_signal:
                     tbs_signal['session_tag'] = f"TBS - Bias {market_bias}"
                     tbs_signal['market_bias'] = market_bias
@@ -1455,7 +1544,7 @@ def main():
                         continue
 
                     all_detected_signals.append(tbs_signal)
-                    logger.info(f"*** SEGNALE TBS TROVATO [{tf}]: {ticker} - {tbs_signal['type']} (Score: A++) ***")
+                    admin_log("SUCCESS", f"🐢 {ticker} [{tf}]: TBS Pattern - Score A++")
 
                 # D. Detection 4 Models CRT
                 crt_signal = detect_crt_models(ticker, df, tf, scanner_config)
@@ -1468,7 +1557,7 @@ def main():
                         continue
 
                     all_detected_signals.append(crt_signal)
-                    logger.info(f"*** SEGNALE CRT TROVATO [{tf}]: {ticker} - {crt_signal['subtype']} (Score: A++) ***")
+                    admin_log("SUCCESS", f"🕯️ {ticker} [{tf}]: {crt_signal['subtype']} - Score A++")
 
             except Exception as e:
                 logger.error(f"Errore elaborazione ticker {ticker} su {tf}: {e}")
@@ -1480,17 +1569,22 @@ def main():
         try:
             logger.info(f"Disattivazione di {len(expired_signals_updates)} segnali scaduti (TP/SL)...")
             
-            # Group by Result Type to minimize DB calls
+            # Group by update type to minimize DB calls
             updates_by_result = {}
+            be_updates = []
+            
             for u in expired_signals_updates:
-                res = u['result']
-                if res not in updates_by_result: updates_by_result[res] = []
-                updates_by_result[res].append(u['id'])
+                if 'result' in u:
+                    res = u['result']
+                    if res not in updates_by_result: updates_by_result[res] = []
+                    updates_by_result[res].append(u['id'])
+                elif 'stop_loss' in u:
+                    be_updates.append(u)
                 
             current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
             
+            # 1. Update concluded trades (Grouped)
             for result_code, ids in updates_by_result.items():
-                # Update in chunks of 500
                 for k in range(0, len(ids), 500):
                     batch = ids[k : k + 500]
                     supabase.table("crt_signals").update({
@@ -1498,9 +1592,27 @@ def main():
                         "result": result_code,
                         "closed_at": current_time
                     }).in_("id", batch).execute()
-                    
-            logger.info(f"DB aggiornato con risultati: {list(updates_by_result.keys())}")
             
+            # 2. Update BE moves (Individually or batching if many)
+            for u in be_updates:
+                supabase.table("crt_signals").update({
+                    "stop_loss": u['stop_loss']
+                }).eq("id", u['id']).execute()
+                    
+            if updates_by_result:
+                logger.info(f"DB aggiornato con risultati: {list(updates_by_result.keys())}")
+            if be_updates:
+                logger.info(f"DB aggiornato con {len(be_updates)} spostamenti a BE.")
+                
+            # Final stats reporting
+            win_count = len(updates_by_result.get('WIN', []))
+            loss_count = len(updates_by_result.get('LOSS', []))
+            be_count = len(updates_by_result.get('BREAKEVEN', [])) + len(be_updates)
+            
+            if win_count > 0 or loss_count > 0 or be_count > 0:
+                summary_msg = f"📊 SUMMARY TRADE: {win_count} WIN, {loss_count} LOSS, {be_count} BE"
+                admin_log("INFO", summary_msg)
+
         except Exception as e:
              logger.error(f"Errore aggiornamento segnali scaduti: {e}")
 
@@ -1555,7 +1667,7 @@ def main():
         logger.info("Nessun NUOVO segnale rilevato in questa scansione.")
 
     total_time = round(time.time() - start_time, 2)
-    logger.info(f"Scansione completata in {total_time} secondi.")
+    admin_log("INFO", f"✅ Scansione completata in {total_time}s.")
 
 if __name__ == "__main__":
     main()
