@@ -15,18 +15,47 @@ from notifications import send_telegram_alert
 from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence
 
 # 1. CONFIGURAZIONE LOGGING
+# Custom Handler for Supabase
+class SupabaseLoggingHandler(logging.Handler):
+    def __init__(self, supabase_client):
+        super().__init__()
+        self.supabase = supabase_client
+        self.source = "scanner_engine"
+
+    def emit(self, record):
+        try:
+            log_entry = self.format(record)
+            # Avoid infinite recursion if supabase itself logs
+            if "system_logs" in log_entry:
+                return
+                
+            self.supabase.table("system_logs").insert({
+                "level": record.levelname,
+                "message": log_entry,
+                "source": self.source
+            }).execute()
+        except Exception:
+            # Fallback to simple print to avoid crashing the scanner if DB is down
+            pass
+
 # Use a custom setup to ensure UTF-8 encoding on Windows
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(message)s') # Keep it clean for the Matrix view
 
 # File Handler with UTF-8
 file_handler = logging.FileHandler("scanner.log", encoding='utf-8')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
-# Console Handler
-console_handler = logging.StreamHandler()
+# Console Handler - Force UTF-8 for Windows compatibility (Emojis)
+import sys
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
@@ -50,22 +79,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 2B. Admin Console Logging System
-def admin_log(level, message):
-    """Invia i log alla tabella system_logs per la visualizzazione Realtime nel Dashboard."""
-    try:
-        supabase.table("system_logs").insert({
-            "level": level,
-            "message": message,
-            "source": "scanner_bot"
-        }).execute()
-        # Manteniamo anche il log locale
-        if level == "ERROR": logger.error(message)
-        elif level == "WARNING": logger.warning(message)
-        else: logger.info(message)
-    except Exception as e:
-        print(f"[LOG ERROR] Database logging failed: {e}")
-        logger.error(message)
+# Add Supabase handler to the logger
+supabase_handler = SupabaseLoggingHandler(supabase)
+supabase_handler.setFormatter(formatter) # Use the same clean formatter
+logger.addHandler(supabase_handler)
 
 # 3. CONFIGURAZIONE TIMEFRAME
 TF_CONFIG = {
@@ -1611,7 +1628,7 @@ def main():
             
             if win_count > 0 or loss_count > 0 or be_count > 0:
                 summary_msg = f"📊 SUMMARY TRADE: {win_count} WIN, {loss_count} LOSS, {be_count} BE"
-                admin_log("INFO", summary_msg)
+                logger.info(summary_msg)
 
         except Exception as e:
              logger.error(f"Errore aggiornamento segnali scaduti: {e}")
@@ -1667,7 +1684,7 @@ def main():
         logger.info("Nessun NUOVO segnale rilevato in questa scansione.")
 
     total_time = round(time.time() - start_time, 2)
-    admin_log("INFO", f"✅ Scansione completata in {total_time}s.")
+    logger.info(f"✅ Scansione completata in {total_time}s.")
 
 if __name__ == "__main__":
     main()
