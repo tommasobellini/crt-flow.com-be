@@ -318,7 +318,6 @@ def detect_macro_sweep(ticker, df, tf, config=None):
         
         # Basic context
         month_now = curr.name.month if hasattr(curr.name, 'month') else 0
-        rsi_series = calculate_rsi(df['Close'])
         
         # Helper per check sweep
         def check_sweep(level_name, level_high, level_low, importance_score):
@@ -349,15 +348,28 @@ def detect_macro_sweep(ticker, df, tf, config=None):
 
                  sl = c_high
                  risk = sl - c_close
-                 # NUOVO CODICE (Intraday Risk Sizing): 
-                 # Rischio strutturale minimo dello 0.3% per assorbire il rumore dell'1H
-                 min_risk = c_close * 0.003
+                 # NUOVO CODICE (Intraday Risk Sizing)
+                 min_risk = c_close * 0.015
                  
                  if risk < min_risk:
                      sl = c_close + min_risk
                      risk = sl - c_close
 
-                 tp = c_close - (risk * 3)
+                 # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+                 # Cerchiamo il minimo più basso delle ultime 25 candele
+                 lookback_window = df.iloc[-25:-1]
+                 structural_target = to_f(lookback_window['Low'].min())
+                 
+                 tp = structural_target
+                 reward = c_close - tp
+                 
+                 if reward <= 0: return None
+                     
+                 actual_rr = reward / risk
+                 
+                 if actual_rr < 1.5:
+                     return None
+                 # ----------------------------------------------
                  
                  return {
                     "symbol": ticker,
@@ -372,7 +384,7 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                     "is_active": True,
                     "stop_loss": round(sl, 2),
                     "take_profit": round(tp, 2),
-                    "rr_ratio": 3.0,
+                    "rr_ratio": round(actual_rr, 1),
                     "liquidity_tier": level_name.capitalize(),
                     "session_tag": importance_score,
                     "has_divergence": seas_score > 0,
@@ -410,15 +422,32 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  # Swing Trading Check: Min risk 2% of price for big moves
                  sl = c_low
                  risk = c_close - sl
-                 # NUOVO CODICE (Intraday Risk Sizing): 
-                 # Rischio strutturale minimo dello 0.3% per assorbire il rumore dell'1H
-                 min_risk = c_close * 0.003
+                 # NUOVO CODICE (Intraday Risk Sizing)
+                 min_risk = c_close * 0.006
                  
                  if risk < min_risk:
                      sl = c_close - min_risk
                      risk = c_close - sl
 
-                 tp = c_close + (risk * 3)
+                 # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+                 # Cerchiamo il massimo più alto delle ultime 80 candele
+                 lookback_window = df.iloc[-80:-1]
+                 structural_target = to_f(lookback_window['High'].max())
+                 
+                 # Il Take profit è il target strutturale
+                 tp = structural_target
+                 reward = tp - c_close
+                 
+                 # Se il target è troppo vicino o sotto il prezzo, il trade è sballato
+                 if reward <= 0: return None
+                     
+                 # Calcolo R/R reale
+                 actual_rr = reward / risk
+                 
+                 # FILTRO DI QUALITÀ: Scartiamo i trade che non danno almeno 1:1.5
+                 if actual_rr < 1.5:
+                     return None
+                 # ----------------------------------------------
                  
                  return {
                     "symbol": ticker,
@@ -433,7 +462,7 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                     "is_active": True,
                     "stop_loss": round(sl, 2),
                     "take_profit": round(tp, 2),
-                    "rr_ratio": 3.0,
+                    "rr_ratio": round(actual_rr, 1),
                     "liquidity_tier": level_name.capitalize(),
                     "session_tag": importance_score,
                     "has_divergence": seas_score > 0,
@@ -551,12 +580,27 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         if is_breakout_up and is_reversal_down:
             sl = max(b_high, r_high)
             risk = sl - r_close
-            # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
-            min_risk = r_close * 0.003
+            # NUOVO CODICE (Intraday Risk Sizing): 1.5%
+            min_risk = r_close * 0.015
             if risk < min_risk:
                 risk = min_risk
                 sl = r_close + risk
-            tp = r_close - (risk * 3)
+
+            # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+            # Cerchiamo il minimo più basso delle ultime 25 candele
+            lookback_window = df.iloc[-25:-1]
+            structural_target = to_f(lookback_window['Low'].min())
+            
+            tp = structural_target
+            reward = r_close - tp
+            
+            if reward <= 0: return None
+                
+            actual_rr = reward / risk
+            
+            if actual_rr < 1.5:
+                return None
+            # ----------------------------------------------
             
             # Entry Validation Rule: Did the reversal candle also break the low of the breakout candle?
             is_validated = r_close < b_low or r_low < b_low
@@ -588,7 +632,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
                 "is_active": True,
                 "stop_loss": round(sl, 2),
                 "take_profit": round(tp, 2),
-                "rr_ratio": 3.0,
+                "rr_ratio": round(actual_rr, 1),
                 "liquidity_tier": "Daily",
                 "session_tag": "TBS Pattern",
                 "has_divergence": False,
@@ -637,12 +681,31 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         if is_breakout_down and is_reversal_up:
             sl = min(b_low, r_low)
             risk = r_close - sl
-            # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
-            min_risk = r_close * 0.003
+            # NUOVO CODICE (Intraday Risk Sizing)
+            min_risk = r_close * 0.006
             if risk < min_risk:
                 risk = min_risk
                 sl = r_close - risk
-            tp = r_close + (risk * 3)
+
+            # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+            # Cerchiamo il massimo più alto delle ultime 80 candele orarie
+            lookback_window = df.iloc[-80:-1]
+            structural_target = to_f(lookback_window['High'].max())
+            
+            # Il Take profit è il target strutturale
+            tp = structural_target
+            reward = tp - r_close
+            
+            # Se il target è troppo vicino o sotto il prezzo, il trade è sballato
+            if reward <= 0: return None
+                
+            # Calcolo R/R reale
+            actual_rr = reward / risk
+            
+            # FILTRO DI QUALITÀ: Scartiamo i trade che non danno almeno 1:1.5
+            if actual_rr < 1.5:
+                return None
+            # ----------------------------------------------
             
             # Entry Validation Rule: Did the reversal candle also break the high of the breakout candle?
             is_validated = r_close > b_high or r_high > b_high
@@ -673,7 +736,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
                 "is_active": True,
                 "stop_loss": round(sl, 2),
                 "take_profit": round(tp, 2),
-                "rr_ratio": 3.0,
+                "rr_ratio": round(actual_rr, 1),
                 "liquidity_tier": "Daily",
                 "session_tag": "TBS Pattern",
                 "has_divergence": False,
@@ -762,14 +825,34 @@ def detect_crt_models(ticker, df, tf, config=None):
                         sl = min([crt_low, t_low] + [to_f(r['Low']) for _, r in intermediate_candles.iterrows()])
                         risk = t_close - sl
                         
-                        # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
-                        if risk < t_close * 0.003:
-                            risk = t_close * 0.003
+                        # NUOVO CODICE (Intraday Risk Sizing)
+                        if risk < t_close * 0.015:
+                            risk = t_close * 0.015
                             sl = t_close - risk
-                            
-                        tp = t_close + (risk * 3)
 
-                        return create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+                        # Cerchiamo il massimo più alto delle ultime 25 candele orarie
+                        lookback_window = df.iloc[-25:-1]
+                        structural_target = to_f(lookback_window['High'].max())
+                        
+                        # Il Take profit è il target strutturale
+                        tp = structural_target
+                        reward = tp - t_close
+                        
+                        # Se il target è troppo vicino o sotto il prezzo, il trade è sballato
+                        if reward <= 0: continue
+                            
+                        # Calcolo R/R reale
+                        actual_rr = reward / risk
+                        
+                        # FILTRO DI QUALITÀ: Scartiamo i trade che non danno almeno 1:1.5
+                        if actual_rr < 1.5:
+                            continue
+                        # ----------------------------------------------
+
+                        signal_data = create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        signal_data['rr_ratio'] = round(actual_rr, 1)
+                        return signal_data
 
             # --- SETUP SHORT (Bearish CRT) ---
             # La Mother Bar è rialzista, e noi rompiamo il suo Low
@@ -797,14 +880,30 @@ def detect_crt_models(ticker, df, tf, config=None):
                         sl = max([crt_high, t_high] + [to_f(r['High']) for _, r in intermediate_candles.iterrows()])
                         risk = sl - t_close
                         
-                        # NUOVO CODICE (Intraday Risk Sizing): 0.3% min risk
-                        if risk < t_close * 0.003:
-                            risk = t_close * 0.003
+                        # NUOVO CODICE (Intraday Risk Sizing)
+                        if risk < t_close * 0.015:
+                            risk = t_close * 0.015
                             sl = t_close + risk
-                            
-                        tp = t_close - (risk * 3)
 
-                        return create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        # --- TARGET STRUTTURALE (Draw on Liquidity) ---
+                        # Cerchiamo il minimo più basso delle ultime 25 candele orarie
+                        lookback_window = df.iloc[-25:-1]
+                        structural_target = to_f(lookback_window['Low'].min())
+                        
+                        tp = structural_target
+                        reward = t_close - tp
+                        
+                        if reward <= 0: continue
+                            
+                        actual_rr = reward / risk
+                        
+                        if actual_rr < 1.5:
+                            continue
+                        # ----------------------------------------------
+
+                        signal_data = create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        signal_data['rr_ratio'] = round(actual_rr, 1)
+                        return signal_data
 
     except Exception as e:
         import logging
@@ -912,6 +1011,7 @@ def validate_existing_signals(ticker, df, active_signals_map):
     """
     Controlla se i segnali attivi per questo ticker sono scaduti (TP/SL).
     Ritorna una lista di aggiornamenti da fare al DB.
+    Include logica di Breakeven (BE) se il prezzo ha raggiunto il 50% del TP.
     """
     updates = []
     if ticker not in active_signals_map:
@@ -924,53 +1024,70 @@ def validate_existing_signals(ticker, df, active_signals_map):
     curr_close = float(curr_candle['Close'])
 
     for sig in signals:
-        # Previeni la chiusura immediata se il segnale è stato creato OGGI.
-        # Spiegazione: La candela Daily di oggi contiene il "sweep" che ha generato il segnale.
-        # Se controlliamo la stessa candela per lo SL, lo colpirà quasi sempre (perché lo SL è sul minimo/massimo del sweep).
         try:
-            # Salta la chiusura immediata SOLO se è un trade Daily.
-            # Se è un trade 1H, vogliamo validarlo anche se è lo stesso giorno!
-            if sig.get('timeframe') == '1D':
-                signal_date = str(sig['created_at'])[:10]
-                candle_date = curr_candle.name.strftime('%Y-%m-%d')
-                if signal_date == candle_date:
-                    continue
+            signal_time = str(sig['created_at'])[:13] 
+            candle_time = curr_candle.name.strftime('%Y-%m-%dT%H')
+            if signal_time == candle_time:
+                continue 
         except Exception as e:
             pass
 
-        # Se il segnale è 'attivo' nel DB (lo abbiamo filtrato prima)
         sl = float(sig['stop_loss'])
         tp = float(sig['take_profit'])
+        entry = float(sig.get('entry_price', sl))
         s_type = sig['type']
         
+        # --- LOGICA BREAKEVEN (BE) ---
+        # Se il prezzo ha percorso il 50% verso il target, il nuovo SL è l'Entry.
+        new_sl = sl
+        is_trailing_be = False
+        
+        if 'bullish' in s_type:
+            # Se siamo a metà strada per il TP
+            if curr_high >= entry + (tp - entry) * 0.5:
+                if sl < entry:
+                    new_sl = entry
+                    is_trailing_be = True
+        elif 'bearish' in s_type:
+            if curr_low <= entry - (entry - tp) * 0.5:
+                if sl > entry:
+                    new_sl = entry
+                    is_trailing_be = True
+
         # Logica scadenza
         should_expire = False
         reason = ""
 
-        if s_type == 'bullish_sweep':
-            if curr_low <= sl:
+        if 'bullish' in s_type:
+            if curr_low <= new_sl:
                 should_expire = True
-                reason = "STOPPED"
+                reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
             elif curr_high >= tp:
                 should_expire = True
                 reason = "PROFIT"
-        elif s_type == 'bearish_sweep':
-            if curr_high >= sl:
+        elif 'bearish' in s_type:
+            if curr_high >= new_sl:
                 should_expire = True
-                reason = "STOPPED"
+                reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
             elif curr_low <= tp:
                 should_expire = True
                 reason = "PROFIT"
         
         if should_expire:
-            # Mappa risultato: PROFIT -> WIN, STOPPED -> LOSS
-            result_code = 'WIN' if reason == 'PROFIT' else 'LOSS' if reason == 'STOPPED' else 'MANUAL_CLOSE'
-            
+            result_code = 'WIN' if reason == 'PROFIT' else 'LOSS' if reason == 'STOPPED' else 'BREAKEVEN'
             logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason} -> {result_code}")
             updates.append({
                 "id": sig['id'],
                 "is_active": False,
-                "result": result_code
+                "result": result_code,
+                "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+            })
+        elif is_trailing_be:
+            # Aggiorna solo lo Stop Loss nel DB
+            logger.info(f"BE Triggerato per {ticker}: SL spostato a {entry}")
+            updates.append({
+                "id": sig['id'],
+                "stop_loss": entry
             })
 
     return updates
@@ -1153,7 +1270,7 @@ def main():
 
     # 3. VALIDAZIONE AUTOMATICA (Paper Trading Update)
     logger.info("Esecuzione validazione trade automatici...")
-    check_open_trades()
+    # check_open_trades() - Rimosso per evitare false LOSS con dati Daily su segnali 1H
 
     # --- ARGUMENT PARSING ---
     parser = argparse.ArgumentParser(description='CRT Flow Scanner')
@@ -1282,35 +1399,76 @@ def main():
                     continue
                 # -----------------------------------------------------
 
+                # B. Helper per l'allineamento al Trend
+                def apply_trend_alignment(sig, bias):
+                    is_bullish = 'bullish' in str(sig.get('type', '')).lower() or 'long' in str(sig.get('type', '')).lower()
+                    is_bearish = 'bearish' in str(sig.get('type', '')).lower() or 'short' in str(sig.get('type', '')).lower()
+                    
+                    if is_bullish:
+                        if bias == 'BULLISH':
+                            sig['diamond_score'] = 'A++'
+                            sig['trend_alignment'] = 'Trend-Aligned'
+                        elif bias == 'NEUTRAL':
+                            sig['diamond_score'] = 'B'
+                            sig['trend_alignment'] = 'Neutral'
+                        elif bias == 'BEARISH':
+                            sig['diamond_score'] = 'C'
+                            sig['trend_alignment'] = 'Counter-Trend'
+                    elif is_bearish:
+                        if bias == 'BEARISH':
+                            sig['diamond_score'] = 'A++'
+                            sig['trend_alignment'] = 'Trend-Aligned'
+                        elif bias == 'NEUTRAL':
+                            sig['diamond_score'] = 'B'
+                            sig['trend_alignment'] = 'Neutral'
+                        elif bias == 'BULLISH':
+                            sig['diamond_score'] = 'C'
+                            sig['trend_alignment'] = 'Counter-Trend'
+                    else:
+                        sig['trend_alignment'] = 'Neutral'
+                    return sig
+
                 # B. Detection nuovi segnali
                 signal = detect_macro_sweep(ticker, df, tf, scanner_config)
                 if signal:
                     signal['session_tag'] = f"Sweep - Bias {market_bias}"
                     signal['market_bias'] = market_bias
-                    all_detected_signals.append(signal)
-                    logger.info(f"*** SEGNALE TROVATO [{tf}]: {ticker} [{signal['liquidity_tier']} Sweep] - {signal['type']} ***")
+                    signal = apply_trend_alignment(signal, market_bias)
                     
-                    # --- ALERT LOGIC ---
-                    is_major = signal['liquidity_tier'] in ['Quarterly', 'Monthly', 'Semi_annual']
-                    if is_major or signal['diamond_score'] in ['A++', 'GOD_MODE']:
-                        pass # send_telegram_alert(signal, market_bias)
-                    # -------------------
+                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
+                    # Prendiamo SOLO i segnali con confluenza macro A++ 
+                    if signal.get('diamond_score') != 'A++':
+                        continue
+                        
+                    all_detected_signals.append(signal)
+                    logger.info(f"*** SEGNALE TROVATO [{tf}]: {ticker} [{signal['liquidity_tier']} Sweep] - {signal['type']} (Score: A++) ***")
 
                 # C. Detection TBS Pattern
                 tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config)
                 if tbs_signal:
                     tbs_signal['session_tag'] = f"TBS - Bias {market_bias}"
                     tbs_signal['market_bias'] = market_bias
+                    tbs_signal = apply_trend_alignment(tbs_signal, market_bias)
+                    
+                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
+                    if tbs_signal.get('diamond_score') != 'A++':
+                        continue
+
                     all_detected_signals.append(tbs_signal)
-                    logger.info(f"*** SEGNALE TBS TROVATO [{tf}]: {ticker} - {tbs_signal['type']} (Score: {tbs_signal.get('diamond_score', 'B')}) ***")
-                    # send_telegram_alert(tbs_signal, market_bias)
+                    logger.info(f"*** SEGNALE TBS TROVATO [{tf}]: {ticker} - {tbs_signal['type']} (Score: A++) ***")
 
                 # D. Detection 4 Models CRT
                 crt_signal = detect_crt_models(ticker, df, tf, scanner_config)
                 if crt_signal:
                     crt_signal['market_bias'] = market_bias
+                    crt_signal = apply_trend_alignment(crt_signal, market_bias)
+                    
+                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
+                    if crt_signal.get('diamond_score') != 'A++':
+                        continue
+
                     all_detected_signals.append(crt_signal)
-                    logger.info(f"*** SEGNALE CRT TROVATO [{tf}]: {ticker} - {crt_signal['subtype']} ***")
+                    logger.info(f"*** SEGNALE CRT TROVATO [{tf}]: {ticker} - {crt_signal['subtype']} (Score: A++) ***")
 
             except Exception as e:
                 logger.error(f"Errore elaborazione ticker {ticker} su {tf}: {e}")
