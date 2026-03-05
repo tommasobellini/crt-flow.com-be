@@ -1282,7 +1282,7 @@ def main():
         except Exception:
             pass
 
-    admin_log("INFO", "🚀 Avvio scansione CRT Flow...")
+    logger.info("🚀 Avvio scansione CRT Flow...")
     start_time = time.time()
     
     # 0. Retry Uploads
@@ -1291,8 +1291,8 @@ def main():
     # 1. Analisi Bias di Mercato (Rotazione Settoriale)
     market_context = analyze_market_context()
     market_bias = market_context["global_bias"]
-    admin_log("INFO", f"Global Market Bias: {market_bias}")
-    admin_log("INFO", f"Leading Sectors: {', '.join(market_context.get('top_sectors', []))}")
+    logger.info(f"Global Market Bias: {market_bias}")
+    logger.info(f"Leading Sectors: {', '.join(market_context.get('top_sectors', []))}")
     
     # Save Market Context to DB for Frontend
     try:
@@ -1537,7 +1537,7 @@ def main():
                         continue
                         
                     all_detected_signals.append(signal)
-                    admin_log("SUCCESS", f"💎 {ticker} [{tf}]: {signal['liquidity_tier']} Sweep - Score A++")
+                    logger.info(f"💎 {ticker} [{tf}]: {signal['liquidity_tier']} Sweep - Score A++")
 
                 # C. Detection TBS Pattern
                 tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config)
@@ -1561,7 +1561,7 @@ def main():
                         continue
 
                     all_detected_signals.append(tbs_signal)
-                    admin_log("SUCCESS", f"🐢 {ticker} [{tf}]: TBS Pattern - Score A++")
+                    logger.info(f"🐢 {ticker} [{tf}]: TBS Pattern - Score A++")
 
                 # D. Detection 4 Models CRT
                 crt_signal = detect_crt_models(ticker, df, tf, scanner_config)
@@ -1574,7 +1574,7 @@ def main():
                         continue
 
                     all_detected_signals.append(crt_signal)
-                    admin_log("SUCCESS", f"🕯️ {ticker} [{tf}]: {crt_signal['subtype']} - Score A++")
+                    logger.info(f"🕯️ {ticker} [{tf}]: {crt_signal['subtype']} - Score A++")
 
             except Exception as e:
                 logger.error(f"Errore elaborazione ticker {ticker} su {tf}: {e}")

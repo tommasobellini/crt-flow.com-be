@@ -16,6 +16,11 @@ tenacity>=8.2.0
 pytz>=2023.3
 colorama>=0.4.6
 
+# HTML Parsing (Required for pd.read_html ticker retrieval)
+lxml>=4.9.0
+html5lib>=1.1
+beautifulsoup4>=4.12.0
+
 # Optional/Transitive fixes
 urllib3>=2.0.0
 certifi>=2024.0.0
