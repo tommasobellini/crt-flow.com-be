@@ -348,6 +348,12 @@ def detect_macro_sweep(ticker, df, tf, config=None):
     if df is None or len(df) < 60: # Servono abbastanza dati per resample Monthly/Quarterly
         return None
 
+    # FILTRO ORARIO (Killzones)
+    # Assumendo che i dati yfinance arrivino in orario locale NY
+    current_hour = df.index[-1].hour
+    if current_hour not in [9, 10, 11, 13, 14, 15]:
+        return None
+
     try:
         results = []
         # --- 1. DATA AGGREGATION (RESAMPLING) ---
@@ -402,6 +408,12 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if sweep_pct < 0.0005: 
                      return None # Too small, just noise
 
+                 # Filtro Displacement (Corpo > 50% del range per rotture decise)
+                 c_body = abs(c_close - to_f(curr['Open']))
+                 c_range = c_high - c_low
+                 if c_range > 0 and (c_body / c_range) < 0.50:
+                     return None # Breakout debole, scartalo
+
                  seas_score = get_seasonality_score(month_now, 'bearish')
                  
                  # Map level name to confluence code
@@ -416,10 +428,10 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if importance_score == "A++": diamond_score = "A++"
                  if importance_score == "A": diamond_score = "A+"
 
-                 sl = c_high
+                 sl = c_high * 1.005 # Aggiunto 0.5% Buffer
                  risk = sl - c_close
                  # NUOVO CODICE (Intraday Risk Sizing)
-                 min_risk = c_close * 0.015
+                 min_risk = c_close * 0.004
                  
                  if risk < min_risk:
                      sl = c_close + min_risk
@@ -477,6 +489,12 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if sweep_pct < 0.0005: 
                      return None # Too small
 
+                 # Filtro Displacement (Corpo > 50% del range per rotture decise)
+                 c_body = abs(c_close - to_f(curr['Open']))
+                 c_range = c_high - c_low
+                 if c_range > 0 and (c_body / c_range) < 0.50:
+                     return None # Breakout debole, scartalo
+
                  seas_score = get_seasonality_score(month_now, 'bullish')
                  
                  confluence_code = "PWL"
@@ -490,18 +508,18 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if importance_score == "A": diamond_score = "A+"
 
                  # Swing Trading Check: Min risk 2% of price for big moves
-                 sl = c_low
+                 sl = c_low * 0.995 # Aggiunto 0.5% Buffer
                  risk = c_close - sl
                  # NUOVO CODICE (Intraday Risk Sizing)
-                 min_risk = c_close * 0.015
+                 min_risk = c_close * 0.004
                  
                  if risk < min_risk:
                      sl = c_close - min_risk
                      risk = c_close - sl
 
                  # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-                 # Cerchiamo il massimo più alto delle ultime 80 candele
-                 lookback_window = df.iloc[-80:-1]
+                 # Cerchiamo il massimo più alto delle ultime 25 candele
+                 lookback_window = df.iloc[-25:-1]
                  structural_target = to_f(lookback_window['High'].max())
                  
                  # Il Take profit è il target strutturale
@@ -602,11 +620,35 @@ def detect_tbs_setup(ticker, df, tf, config=None):
     df = clean_df(df)
     if df is None or len(df) < 20: return None
 
+    # FILTRO ORARIO (Killzones)
+    # Assumendo che i dati yfinance arrivino in orario locale NY
+    current_hour = df.index[-1].hour
+    if current_hour not in [9, 10, 11, 13, 14, 15]:
+        return None
+
     try:
         # Troviamo i pivot recenti (ultime 20 candele, escludendo le ultime 2 che sono il setup)
         lookback = 20
         recent_df = df.iloc[-lookback:-2]
         if recent_df.empty: return None
+
+        # --- NUOVA LOGICA: LIQUIDITÀ ISTITUZIONALE (PDH / PDL) ---
+        pivot_high = None
+        pivot_low = None
+        
+        if tf == '1H':
+            df_d = df.resample('D').agg({'High': 'max', 'Low': 'min'}).dropna()
+            if len(df_d) >= 2:
+                pivot_high = to_f(df_d.iloc[-2]['High'])
+                pivot_low = to_f(df_d.iloc[-2]['Low'])
+        elif tf == '1D':
+            if len(df) >= 3:
+                pivot_high = to_f(df.iloc[-3]['High'])
+                pivot_low = to_f(df.iloc[-3]['Low'])
+                
+        if pivot_high is None or pivot_low is None:
+            return None
+        # ---------------------------------------------------------
 
         # Calcoliamo la Media Mobile a 20 periodi del Volume per il breakout
         if 'Volume' in df.columns:
@@ -633,7 +675,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         r_low = to_f(reversal_candle['Low'])
 
         # BEARISH TBS (Short) - Ricerca di uno Swing High precedente
-        pivot_high = to_f(recent_df['High'].max())
+        # (PDH calcolato all'inizio della funzione)
         
         # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
         # Usiamo .iloc[:, 0] se è un DataFrame per evitare ambiguità
@@ -645,7 +687,10 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         
         # Check volume breakout: Il volume della trappola era superiore alla media?
         if 'Volume' in breakout_candle and avg_vol_20 > 0:
-            high_volume_breakout = to_b(breakout_candle['Volume'] > avg_vol_20)
+            # Filtro RVOL > 1.3 (Volume 30% superiore alla media)
+            if breakout_candle['Volume'] < (avg_vol_20 * 1.3):
+                return None
+            high_volume_breakout = True
         else:
             high_volume_breakout = False
         
@@ -660,29 +705,28 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         # 2. Reversal candle inverte e CHIUDE SOTTO il pivot_high (Tarta Soup) in modo forte
         is_reversal_down = to_b(r_close < (pivot_high - tentative_risk_bearish * 0.1)) and to_b(r_close < r_open)
 
+        # Filtro Golden Wick (La wick superiore deve essere > 40% del range totale della candela di reversal)
+        r_total_range = r_high - r_low
+        upper_wick = r_high - max(r_open, r_close)
+        is_golden_wick = False
+        if r_total_range > 0 and (upper_wick / r_total_range) >= 0.40:
+             is_golden_wick = True
+        else:
+             is_reversal_down = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
+
         if is_breakout_up and is_reversal_down:
             sl = max(b_high, r_high)
             risk = sl - r_close
-            # NUOVO CODICE (Intraday Risk Sizing): 1.5%
-            min_risk = r_close * 0.015
+            # NUOVO CODICE (Intraday Risk Sizing): 0.4%
+            min_risk = r_close * 0.004
             if risk < min_risk:
                 risk = min_risk
                 sl = r_close + risk
 
-            # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-            # Cerchiamo il minimo più basso delle ultime 25 candele
-            lookback_window = df.iloc[-25:-1]
-            structural_target = to_f(lookback_window['Low'].min())
-            
-            tp = structural_target
+            # --- TARGET MECCANICO (R/R Fisso 1:2) ---
+            tp = r_close - (risk * 2.0)
             reward = r_close - tp
-            
-            if reward <= 0: return None
-                
-            actual_rr = reward / risk
-            
-            if actual_rr < 1.5:
-                return None
+            actual_rr = 2.0
             # ----------------------------------------------
             
             # Entry Validation Rule: Did the reversal candle also break the low of the breakout candle?
@@ -708,7 +752,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
                 "type": "bearish_tbs",
                 "subtype": "tbs_setup",
                 "range_high": pivot_high,
-                "range_low": to_f(recent_df['Low'].min()),
+                "range_low": pivot_low,
                 "price": r_close,
                 "entry_price": r_close,
                 "result": None,
@@ -726,16 +770,16 @@ def detect_tbs_setup(ticker, df, tf, config=None):
                 "hitting_fvg": False,
                 "smt_divergence": False,
                 "adr_percent": 0,
-                "rel_volume": int(breakout_candle['Volume'] / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
+                "rel_volume": int(breakout_candle.get('Volume', 0) / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
                 "volatility_warning": False,
-                "is_golden_wick": False,
+                "is_golden_wick": True,
                 "touches": int(touches_high),
                 "market_bias": None,
                 "max_favorable_excursion": 0.0
             }
 
         # BULLISH TBS (Long) - Ricerca di uno Swing Low precedente
-        pivot_low = to_f(recent_df['Low'].min())
+        # (PDL calcolato all'inizio della funzione)
         
         # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
         low_vals = recent_df['Low']
@@ -746,7 +790,10 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         
         # Check volume breakout: Il volume della trappola era superiore alla media?
         if 'Volume' in breakout_candle and avg_vol_20 > 0:
-            high_volume_breakout = to_b(breakout_candle['Volume'] > avg_vol_20)
+            # Filtro RVOL > 1.3 (Volume 30% superiore alla media)
+            if breakout_candle['Volume'] < (avg_vol_20 * 1.3):
+                return None
+            high_volume_breakout = True
         else:
             high_volume_breakout = False
         
@@ -761,33 +808,28 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         # 2. Reversal candle inverte e CHIUDE SOPRA il pivot_low in modo forte
         is_reversal_up = to_b(r_close > (pivot_low + tentative_risk_bullish * 0.1)) and to_b(r_close > r_open)
 
+        # Filtro Golden Wick (La wick inferiore deve essere > 40% del range totale della candela di reversal)
+        r_total_range = r_high - r_low
+        lower_wick = min(r_open, r_close) - r_low
+        is_golden_wick = False
+        if r_total_range > 0 and (lower_wick / r_total_range) >= 0.40:
+             is_golden_wick = True
+        else:
+             is_reversal_up = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
+
         if is_breakout_down and is_reversal_up:
             sl = min(b_low, r_low)
             risk = r_close - sl
             # NUOVO CODICE (Intraday Risk Sizing)
-            min_risk = r_close * 0.015
+            min_risk = r_close * 0.004
             if risk < min_risk:
                 risk = min_risk
                 sl = r_close - risk
 
-            # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-            # Cerchiamo il massimo più alto delle ultime 25 candele orarie
-            lookback_window = df.iloc[-25:-1]
-            structural_target = to_f(lookback_window['High'].max())
-            
-            # Il Take profit è il target strutturale
-            tp = structural_target
+            # --- TARGET MECCANICO (R/R Fisso 1:2) ---
+            tp = r_close + (risk * 2.0)
             reward = tp - r_close
-            
-            # Se il target è troppo vicino o sotto il prezzo, il trade è sballato
-            if reward <= 0: return None
-                
-            # Calcolo R/R reale
-            actual_rr = reward / risk
-            
-            # FILTRO DI QUALITÀ: Scartiamo i trade che non danno almeno 1:1.5
-            if actual_rr < 1.5:
-                return None
+            actual_rr = 2.0
             # ----------------------------------------------
             
             # Entry Validation Rule: Did the reversal candle also break the high of the breakout candle?
@@ -811,7 +853,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
                 "timeframe": tf,
                 "type": "bullish_tbs",
                 "subtype": "tbs_setup",
-                "range_high": to_f(recent_df['High'].max()),
+                "range_high": pivot_high,
                 "range_low": pivot_low,
                 "price": r_close,
                 "entry_price": r_close,
@@ -913,24 +955,10 @@ def detect_crt_models(ticker, df, tf, config=None):
                             risk = t_close * 0.015
                             sl = t_close - risk
 
-                        # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-                        # Cerchiamo il massimo più alto delle ultime 25 candele orarie
-                        lookback_window = df.iloc[-25:-1]
-                        structural_target = to_f(lookback_window['High'].max())
-                        
-                        # Il Take profit è il target strutturale
-                        tp = structural_target
+                        # --- TARGET MECCANICO (R/R Fisso 1:2) ---
+                        tp = t_close + (risk * 2.0)
                         reward = tp - t_close
-                        
-                        # Se il target è troppo vicino o sotto il prezzo, il trade è sballato
-                        if reward <= 0: continue
-                            
-                        # Calcolo R/R reale
-                        actual_rr = reward / risk
-                        
-                        # FILTRO DI QUALITÀ: Scartiamo i trade che non danno almeno 1:1.5
-                        if actual_rr < 1.5:
-                            continue
+                        actual_rr = 2.0
                         # ----------------------------------------------
 
                         signal_data = create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
@@ -968,20 +996,10 @@ def detect_crt_models(ticker, df, tf, config=None):
                             risk = t_close * 0.015
                             sl = t_close + risk
 
-                        # --- TARGET STRUTTURALE (Draw on Liquidity) ---
-                        # Cerchiamo il minimo più basso delle ultime 25 candele orarie
-                        lookback_window = df.iloc[-25:-1]
-                        structural_target = to_f(lookback_window['Low'].min())
-                        
-                        tp = structural_target
+                        # --- TARGET MECCANICO (R/R Fisso 1:2) ---
+                        tp = t_close - (risk * 2.0)
                         reward = t_close - tp
-                        
-                        if reward <= 0: continue
-                            
-                        actual_rr = reward / risk
-                        
-                        if actual_rr < 1.5:
-                            continue
+                        actual_rr = 2.0
                         # ----------------------------------------------
 
                         signal_data = create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
