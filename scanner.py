@@ -952,6 +952,10 @@ def detect_crt_models(ticker, df, tf, config=None):
 
                         signal_data = create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
                         signal_data['rr_ratio'] = round(actual_rr, 1)
+                        signal_data['trigger_candles'] = json.dumps([
+                            int(df.index[-i].timestamp()), # Mother Bar
+                            int(df.index[-1].timestamp())  # Trigger Candle
+                        ])
                         return signal_data
 
             # --- SETUP SHORT (Bearish CRT) ---
@@ -993,6 +997,10 @@ def detect_crt_models(ticker, df, tf, config=None):
 
                         signal_data = create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
                         signal_data['rr_ratio'] = round(actual_rr, 1)
+                        signal_data['trigger_candles'] = json.dumps([
+                            int(df.index[-i].timestamp()), # Mother Bar
+                            int(df.index[-1].timestamp())  # Trigger Candle
+                        ])
                         return signal_data
 
     except Exception as e:
@@ -1053,6 +1061,7 @@ def detect_golden_wick(ticker, df, tf, config=None):
             signal_data['rr_ratio'] = 2.0
             signal_data['diamond_score'] = "A++"
             signal_data['session_tag'] = "Limit Order @ 50% Wick"
+            signal_data['trigger_candles'] = json.dumps([int(df.index[-1].timestamp())])
 
         # --- SETUP SHORT (Wick in alto) ---
         elif upper_wick > (c_range * 0.45) and c_close < (c_high - c_range * 0.60):
@@ -1079,6 +1088,7 @@ def detect_golden_wick(ticker, df, tf, config=None):
             signal_data['rr_ratio'] = 2.0
             signal_data['diamond_score'] = "A++"
             signal_data['session_tag'] = "Limit Order @ 50% Wick"
+            signal_data['trigger_candles'] = json.dumps([int(df.index[-1].timestamp())])
 
         return signal_data
 
@@ -1095,7 +1105,7 @@ def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, to
         "confluence_level": subtype, # Es: "Classic 3 Candle CRT"
         "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
         "rel_volume": 0, "volatility_warning": False, "is_golden_wick": False, "touches": touches,
-        "market_bias": None, "max_favorable_excursion": 0.0
+        "market_bias": None, "max_favorable_excursion": 0.0, "trigger_candles": None
     }
 
 def analyze_market_context():
@@ -1669,6 +1679,15 @@ def main():
 
                     all_detected_signals.append(crt_signal)
                     logger.info(f"🕯️ {ticker} [{tf}]: {crt_signal['subtype']} - Score A++")
+
+                # E. Detection Golden Wick
+                gw_signal = detect_golden_wick(ticker, df, tf, scanner_config)
+                if gw_signal:
+                    gw_signal['market_bias'] = market_bias
+                    gw_signal = apply_trend_alignment(gw_signal, market_bias)
+                    if gw_signal.get('diamond_score') == 'A++':
+                        all_detected_signals.append(gw_signal)
+                        logger.info(f"✨ {ticker} [{tf}]: Golden Wick Pattern - Score A++")
 
             except Exception as e:
                 logger.error(f"Errore elaborazione ticker {ticker} su {tf}: {e}")
