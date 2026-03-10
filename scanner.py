@@ -12,7 +12,16 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 from notifications import send_telegram_alert
-from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence
+from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence, get_historical_seasonality
+
+# SEASONALITY CACHE to avoid redundant API calls
+SEASONALITY_CACHE = {}
+
+def fetch_seasonality_with_cache(ticker):
+    if ticker not in SEASONALITY_CACHE:
+        logger.info(f"📊 Recupero stagionalità storica per {ticker}...")
+        SEASONALITY_CACHE[ticker] = get_historical_seasonality(ticker)
+    return SEASONALITY_CACHE[ticker]
 
 # 1. CONFIGURAZIONE LOGGING
 logger = logging.getLogger(__name__)
@@ -403,7 +412,14 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if c_range > 0 and (c_body / c_range) < 0.50:
                      return None # Breakout debole, scartalo
 
-                 seas_score = get_seasonality_score(month_now, 'bearish')
+                 # Real Seasonality Logic
+                 seas_data = fetch_seasonality_with_cache(ticker)
+                 m_stats = seas_data.get(str(month_now), {})
+                 seas_score = 0
+                 if m_stats:
+                     # Bearish: favor those with negative avg return or low win rate (<50%)
+                     if m_stats.get('avg_return', 0) < 0: seas_score += 1
+                     if m_stats.get('win_rate', 0) < 50: seas_score += 1
                  
                  # Map level name to confluence code
                  confluence_code = "PWH" 
@@ -466,10 +482,11 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                     "hitting_fvg": False,
                     "smt_divergence": False,
                     "adr_percent": 0,
-                    "rel_volume": 0,
-                    "volatility_warning": False,
-                    "is_golden_wick": True
-                 }
+                     "rel_volume": 0,
+                     "volatility_warning": False,
+                     "is_golden_wick": True,
+                     "seasonality_data": json.dumps(seas_data)
+                  }
                  
              # B. Bullish Sweep
              if c_low < level_low and c_close > level_low:
@@ -484,7 +501,14 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if c_range > 0 and (c_body / c_range) < 0.50:
                      return None # Breakout debole, scartalo
 
-                 seas_score = get_seasonality_score(month_now, 'bullish')
+                 # Real Seasonality Logic
+                 seas_data = fetch_seasonality_with_cache(ticker)
+                 m_stats = seas_data.get(str(month_now), {})
+                 seas_score = 0
+                 if m_stats:
+                     # Bullish: favor those with positive avg return or high win rate (>50%)
+                     if m_stats.get('avg_return', 0) > 0: seas_score += 1
+                     if m_stats.get('win_rate', 0) > 50: seas_score += 1
                  
                  confluence_code = "PWL"
                  if "monthly" in level_name: confluence_code = "PML"
@@ -1101,7 +1125,7 @@ def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, to
         "range_high": high, "range_low": low, "price": price, "entry_price": price,
         "result": None, "is_active": True, "status": status, "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
         "rr_ratio": 3.0, "liquidity_tier": "CRT Framework", "session_tag": "Price Action",
-        "has_divergence": False, "seasonality_score": 0, "diamond_score": "A+" if touches <= 3 else "A",
+        "has_divergence": False, "seasonality_score": 0, "seasonality_data": json.dumps(fetch_seasonality_with_cache(ticker)), "diamond_score": "A+" if touches <= 3 else "A",
         "confluence_level": subtype, # Es: "Classic 3 Candle CRT"
         "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
         "rel_volume": 0, "volatility_warning": False, "is_golden_wick": False, "touches": touches,
@@ -1218,7 +1242,7 @@ def validate_existing_signals(ticker, df, active_signals_map):
 
         sl = float(sig['stop_loss'])
         tp = float(sig['take_profit'])
-        entry = float(sig.get('entry_price', price))
+        entry = float(sig.get('entry_price', sig.get('price')))
         s_type = sig['type']
         status = sig.get('status', 'active')
         
@@ -1772,27 +1796,32 @@ def main():
         try:
             logger.info(f"Disattivazione di {len(expired_signals_updates)} segnali scaduti (TP/SL)...")
             
-            # Group by update type to minimize DB calls
-            updates_by_result = {}
+            # Group by both result and exit_reason to preserve autopsy data
+            updates_by_group = {}
             be_updates = []
             
             for u in expired_signals_updates:
                 if 'result' in u:
                     res = u['result']
-                    if res not in updates_by_result: updates_by_result[res] = []
-                    updates_by_result[res].append(u['id'])
+                    reason_txt = u.get('exit_reason', 'Standard Exit')
+                    group_key = (res, reason_txt)
+                    
+                    if group_key not in updates_by_group: 
+                        updates_by_group[group_key] = []
+                    updates_by_group[group_key].append(u['id'])
                 elif 'stop_loss' in u:
                     be_updates.append(u)
                 
             current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
             
-            # 1. Update concluded trades (Grouped)
-            for result_code, ids in updates_by_result.items():
+            # 1. Update concluded trades (Grouped by Result + Reason)
+            for (result_code, exit_reason_val), ids in updates_by_group.items():
                 for k in range(0, len(ids), 500):
                     batch = ids[k : k + 500]
                     supabase.table("crt_signals").update({
                         "is_active": False,
                         "result": result_code,
+                        "exit_reason": exit_reason_val,
                         "closed_at": current_time
                     }).in_("id", batch).execute()
             
@@ -1801,19 +1830,20 @@ def main():
                 update_payload = {}
                 if 'stop_loss' in u: update_payload["stop_loss"] = u['stop_loss']
                 if 'status' in u: update_payload["status"] = u['status']
+                if 'exit_reason' in u: update_payload["exit_reason"] = u['exit_reason']
                 
                 if update_payload:
                     supabase.table("crt_signals").update(update_payload).eq("id", u['id']).execute()
                     
-            if updates_by_result:
-                logger.info(f"DB aggiornato con risultati: {list(updates_by_result.keys())}")
+            if updates_by_group:
+                logger.info(f"DB aggiornato con risultati: {list(updates_by_group.keys())}")
             if be_updates:
                 logger.info(f"DB aggiornato con {len(be_updates)} spostamenti a BE.")
                 
             # Final stats reporting
-            win_count = len(updates_by_result.get('WIN', []))
-            loss_count = len(updates_by_result.get('LOSS', []))
-            be_count = len(updates_by_result.get('BREAKEVEN', [])) + len(be_updates)
+            win_count = sum(len(ids) for (res, reason), ids in updates_by_group.items() if res == 'WIN')
+            loss_count = sum(len(ids) for (res, reason), ids in updates_by_group.items() if res == 'LOSS')
+            be_count = sum(len(ids) for (res, reason), ids in updates_by_group.items() if res == 'BREAKEVEN') + len(be_updates)
             
             if win_count > 0 or loss_count > 0 or be_count > 0:
                 summary_msg = f"📊 SUMMARY TRADE: {win_count} WIN, {loss_count} LOSS, {be_count} BE"

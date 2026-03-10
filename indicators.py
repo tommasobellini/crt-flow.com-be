@@ -1,5 +1,7 @@
 import pandas as pd
 import logging
+import yfinance as yf
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +161,48 @@ def calculate_adr_percent(df: pd.DataFrame, period: int = 5) -> int:
         return int((current_range / avg_range) * 100)
     except:
         return 0
+
+def get_historical_seasonality(ticker: str) -> dict:
+    """
+    Fetch historical monthly data for the ticker and calculate 
+    average monthly returns and win rates over the maximum available period.
+    """
+    try:
+        # Fetch max 20 years of monthly data to keep it efficient
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * 20)
+        
+        df = yf.download(ticker, start=start_date, end=end_date, interval="1mo", progress=False)
+        
+        if df.empty or len(df) < 12:
+            return {}
+            
+        # Calculate monthly percentage returns
+        df['Return'] = df['Close'].pct_change()
+        df = df.dropna()
+        
+        # Group by month
+        df['Month'] = df.index.month
+        
+        monthly_stats = {}
+        for month in range(1, 13):
+            month_data = df[df['Month'] == month]
+            if not month_data.empty:
+                avg_return = month_data['Return'].mean()
+                win_rate = (month_data['Return'] > 0).sum() / len(month_data)
+                
+                monthly_stats[str(month)] = {
+                    "avg_return": float(round(avg_return * 100, 2)),
+                    "win_rate": float(round(win_rate * 100, 2)),
+                    "sample_size": int(len(month_data))
+                }
+            else:
+                monthly_stats[str(month)] = {"avg_return": 0, "win_rate": 0, "sample_size": 0}
+                
+        return monthly_stats
+    except Exception as e:
+        logger.error(f"Error calculating historical seasonality for {ticker}: {e}")
+        return {}
 
 def detect_fvg_confluence(df: pd.DataFrame, type_direction: str) -> bool:
     """
