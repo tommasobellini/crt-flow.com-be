@@ -1241,29 +1241,64 @@ def validate_existing_signals(ticker, df, active_signals_map):
         # Logica scadenza
         should_expire = False
         reason = ""
+        exit_reason_text = "Standard Exit"
 
         if 'bullish' in s_type:
             if curr_low <= new_sl:
                 should_expire = True
                 reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
+                
+                # --- AUTOPSIA DEL LOSS (BULLISH) ---
+                if reason == "STOPPED":
+                    if curr_close > new_sl:
+                        exit_reason_text = "Stop Hunt (Wicked Out)"
+                    elif curr_high >= entry + (tp - entry) * 0.8:
+                        exit_reason_text = "Greed (Missed TP by <20%)"
+                    else:
+                        exit_reason_text = "Trend Failure (Full Body Break)"
+
             elif curr_high >= tp:
                 should_expire = True
                 reason = "PROFIT"
+                
+                # --- ANALISI DEL WIN (BULLISH) ---
+                if curr_low <= entry - (entry - sl) * 0.8:
+                    exit_reason_text = "Struggle Hit (Almost Stopped)"
+                else:
+                    exit_reason_text = "Clean Snipe"
+
         elif 'bearish' in s_type:
             if curr_high >= new_sl:
                 should_expire = True
                 reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
+                
+                # --- AUTOPSIA DEL LOSS (BEARISH) ---
+                if reason == "STOPPED":
+                    if curr_close < new_sl:
+                        exit_reason_text = "Stop Hunt (Wicked Out)"
+                    elif curr_low <= entry - (entry - tp) * 0.8:
+                        exit_reason_text = "Greed (Missed TP by <20%)"
+                    else:
+                        exit_reason_text = "Trend Failure (Full Body Break)"
+
             elif curr_low <= tp:
                 should_expire = True
                 reason = "PROFIT"
+                
+                # --- ANALISI DEL WIN (BEARISH) ---
+                if curr_high >= entry + (sl - entry) * 0.8:
+                    exit_reason_text = "Struggle Hit (Almost Stopped)"
+                else:
+                    exit_reason_text = "Clean Snipe"
         
         if should_expire:
             result_code = 'WIN' if reason == 'PROFIT' else 'LOSS' if reason == 'STOPPED' else 'BREAKEVEN'
-            logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason} -> {result_code}")
+            logger.info(f"Segnale SCADUTO per {ticker} ({sig['timeframe']}): {reason} -> {result_code} ({exit_reason_text})")
             updates.append({
                 "id": sig['id'],
                 "is_active": False,
                 "result": result_code,
+                "exit_reason": exit_reason_text,
                 "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
             })
         elif is_trailing_be:
