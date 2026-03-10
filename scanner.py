@@ -1055,7 +1055,7 @@ def detect_golden_wick(ticker, df, tf, config=None):
             
             tp = wick_50 + (risk_from_50 * 2.0)
             
-            signal_data = create_signal_dict(ticker, tf, "bullish_wick", "Golden Wick (Buy Zone)", c_high, c_low, c_close, sl, tp, 1)
+            signal_data = create_signal_dict(ticker, tf, "bullish_wick", "Golden Wick (Buy Zone)", c_high, c_low, c_close, sl, tp, 1, status="pending")
             signal_data['entry_price'] = round(wick_50, 2)
             signal_data['range_low'] = round(wick_100, 2) 
             signal_data['rr_ratio'] = 2.0
@@ -1082,7 +1082,7 @@ def detect_golden_wick(ticker, df, tf, config=None):
             
             tp = wick_50 - (risk_from_50 * 2.0)
             
-            signal_data = create_signal_dict(ticker, tf, "bearish_wick", "Golden Wick (Sell Zone)", c_high, c_low, c_close, sl, tp, 1)
+            signal_data = create_signal_dict(ticker, tf, "bearish_wick", "Golden Wick (Sell Zone)", c_high, c_low, c_close, sl, tp, 1, status="pending")
             signal_data['entry_price'] = round(wick_50, 2)
             signal_data['range_high'] = round(wick_100, 2)
             signal_data['rr_ratio'] = 2.0
@@ -1095,11 +1095,11 @@ def detect_golden_wick(ticker, df, tf, config=None):
     except Exception as e:
         return None
 
-def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, touches):
+def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, touches, status="active"):
     return {
         "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
         "range_high": high, "range_low": low, "price": price, "entry_price": price,
-        "result": None, "is_active": True, "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
+        "result": None, "is_active": True, "status": status, "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
         "rr_ratio": 3.0, "liquidity_tier": "CRT Framework", "session_tag": "Price Action",
         "has_divergence": False, "seasonality_score": 0, "diamond_score": "A+" if touches <= 3 else "A",
         "confluence_level": subtype, # Es: "Classic 3 Candle CRT"
@@ -1218,11 +1218,49 @@ def validate_existing_signals(ticker, df, active_signals_map):
 
         sl = float(sig['stop_loss'])
         tp = float(sig['take_profit'])
-        entry = float(sig.get('entry_price', sl))
+        entry = float(sig.get('entry_price', price))
         s_type = sig['type']
+        status = sig.get('status', 'active')
         
+        # --- GESTIONE SEGNALI PENDING (Limit Orders) ---
+        if status == 'pending':
+            triggered = False
+            missed = False
+            
+            if 'bullish' in s_type:
+                if curr_low <= entry:
+                    triggered = True
+                elif curr_high >= tp:
+                    missed = True
+            elif 'bearish' in s_type:
+                if curr_high >= entry:
+                    triggered = True
+                elif curr_low <= tp:
+                    missed = True
+            
+            if triggered:
+                logger.info(f"⚡ {ticker} [{sig['timeframe']}]: Limit Order ESEGUITO @ {entry}")
+                updates.append({
+                    "id": sig['id'],
+                    "status": 'active'
+                })
+                # Una volta attivato, continuiamo la validazione come trade attivo per la candela corrente
+                status = 'active'
+            elif missed:
+                logger.info(f"👻 {ticker} [{sig['timeframe']}]: Ghost Win EVITATA (Target hit prima dell'entry). Segnale mancato.")
+                updates.append({
+                    "id": sig['id'],
+                    "is_active": False,
+                    "status": 'missed',
+                    "result": 'MISSED',
+                    "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+                })
+                continue # Skip rest of validation for this signal
+            else:
+                continue # Ancora in attesa, skip validation
+
         # --- LOGICA BREAKEVEN (BE) ---
-        # Se il prezzo ha percorso il 50% verso il target, il nuovo SL è l'Entry.
+        # Solo per trade già ATTIVI
         new_sl = sl
         is_trailing_be = False
         
@@ -1758,11 +1796,14 @@ def main():
                         "closed_at": current_time
                     }).in_("id", batch).execute()
             
-            # 2. Update BE moves (Individually or batching if many)
+            # 2. Update status and sl moves (Individually or batching if many)
             for u in be_updates:
-                supabase.table("crt_signals").update({
-                    "stop_loss": u['stop_loss']
-                }).eq("id", u['id']).execute()
+                update_payload = {}
+                if 'stop_loss' in u: update_payload["stop_loss"] = u['stop_loss']
+                if 'status' in u: update_payload["status"] = u['status']
+                
+                if update_payload:
+                    supabase.table("crt_signals").update(update_payload).eq("id", u['id']).execute()
                     
             if updates_by_result:
                 logger.info(f"DB aggiornato con risultati: {list(updates_by_result.keys())}")
