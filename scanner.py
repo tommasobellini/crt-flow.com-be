@@ -15,7 +15,10 @@ from notifications import send_telegram_alert
 from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence
 
 # 1. CONFIGURAZIONE LOGGING
-# Custom Handler for Supabase
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(message)s')
+
 class SupabaseLoggingHandler(logging.Handler):
     def __init__(self, supabase_client):
         super().__init__()
@@ -25,64 +28,50 @@ class SupabaseLoggingHandler(logging.Handler):
     def emit(self, record):
         try:
             log_entry = self.format(record)
-            # Avoid infinite recursion if supabase itself logs
-            if "system_logs" in log_entry:
-                return
-                
+            if "system_logs" in log_entry: return
             self.supabase.table("system_logs").insert({
-                "level": record.levelname,
-                "message": log_entry,
-                "source": self.source
+                "level": record.levelname, "message": log_entry, "source": self.source
             }).execute()
-        except Exception:
-            # Fallback to simple print to avoid crashing the scanner if DB is down
+        except: pass
+
+def setup_logging():
+    # File Handler with UTF-8
+    file_handler = logging.FileHandler("scanner.log", encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Console Handler - Force UTF-8 for Windows compatibility (Emojis)
+    import sys
+    if sys.platform == "win32":
+        import io
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        except:
             pass
 
-# Use a custom setup to ensure UTF-8 encoding on Windows
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(message)s') # Keep it clean for the Matrix view
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
-# File Handler with UTF-8
-file_handler = logging.FileHandler("scanner.log", encoding='utf-8')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+supabase = None
 
-# Console Handler - Force UTF-8 for Windows compatibility (Emojis)
-import sys
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+def setup_supabase():
+    global supabase
+    if os.path.exists(".env.local"):
+        load_dotenv(".env.local")
 
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+    url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+    key = os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
-# 2. CARICAMENTO VARIABILI D'AMBIENTE
-# Carica .env.local solo se esiste (sviluppo locale)
-if os.path.exists(".env.local"):
-    load_dotenv(".env.local")
-    logger.info("Caricate variabili da .env.local")
-else:
-    logger.info("File .env.local non trovato, utilizzo variabili d'ambiente di sistema")
-
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-
-logger.info(SUPABASE_URL)
-# Si consiglia l'uso della SERVICE_ROLE_KEY per operazioni di backend/cron
-SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-logger.info(SUPABASE_KEY)
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("Credenziali Supabase mancanti. Verifica il file .env")
-    exit(1)
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Add Supabase handler to the logger
-supabase_handler = SupabaseLoggingHandler(supabase)
-supabase_handler.setFormatter(formatter) # Use the same clean formatter
-logger.addHandler(supabase_handler)
+    if url and key:
+        try:
+            supabase = create_client(url, key)
+            sb_handler = SupabaseLoggingHandler(supabase)
+            sb_handler.setFormatter(formatter)
+            logger.addHandler(sb_handler)
+        except Exception as e:
+            print(f"Errore Supabase: {e}")
 
 # 3. CONFIGURAZIONE TIMEFRAME
 TF_CONFIG = {
@@ -1012,6 +1001,90 @@ def detect_crt_models(ticker, df, tf, config=None):
 
     return None
 
+
+def detect_golden_wick(ticker, df, tf, config=None):
+    """
+    Rileva le 'Sponsor Candles' (Wick lunghe) e calcola la zona di entrata
+    istituzionale (dal 50% al 100% del riempimento della wick).
+    """
+    if tf not in ['1D', '1H']: return None
+    df = clean_df(df)
+    if df is None or len(df) < 25: return None
+
+    try:
+        c = df.iloc[-1]
+        c_open, c_close, c_high, c_low = to_f(c['Open']), to_f(c['Close']), to_f(c['High']), to_f(c['Low'])
+        c_range = c_high - c_low
+
+        if c_range <= 0: return None
+
+        # REGOLA: Il range della candela deve essere anomalo (> 1.4x la media)
+        avg_range = (df['High'] - df['Low']).rolling(20).mean().iloc[-2]
+        if c_range < (avg_range * 1.4):
+            return None
+
+        upper_wick = c_high - max(c_open, c_close)
+        lower_wick = min(c_open, c_close) - c_low
+
+        signal_data = None
+
+        # --- SETUP LONG (Wick in basso) ---
+        if lower_wick > (c_range * 0.45) and c_close > (c_low + c_range * 0.60):
+            
+            wick_100 = c_low
+            wick_50 = c_low + (lower_wick * 0.5)
+            
+            sl = wick_100 * 0.998
+            risk_from_50 = wick_50 - sl
+            
+            # NUOVO FIX: Intraday Risk Sizing di sicurezza
+            min_risk = wick_50 * 0.004
+            if risk_from_50 < min_risk:
+                risk_from_50 = min_risk
+                sl = wick_50 - risk_from_50 # Abbassiamo lo SL per garantire il buffer minimo
+
+            if risk_from_50 <= 0: return None
+            
+            tp = wick_50 + (risk_from_50 * 2.0)
+            
+            signal_data = create_signal_dict(ticker, tf, "bullish_wick", "Golden Wick (Buy Zone)", c_high, c_low, c_close, sl, tp, 1)
+            signal_data['entry_price'] = round(wick_50, 2)
+            signal_data['range_low'] = round(wick_100, 2) 
+            signal_data['rr_ratio'] = 2.0
+            signal_data['diamond_score'] = "A++"
+            signal_data['session_tag'] = "Limit Order @ 50% Wick"
+
+        # --- SETUP SHORT (Wick in alto) ---
+        elif upper_wick > (c_range * 0.45) and c_close < (c_high - c_range * 0.60):
+            
+            wick_100 = c_high
+            wick_50 = c_high - (upper_wick * 0.5)
+            
+            sl = wick_100 * 1.002
+            risk_from_50 = sl - wick_50
+            
+            # NUOVO FIX: Intraday Risk Sizing di sicurezza
+            min_risk = wick_50 * 0.004
+            if risk_from_50 < min_risk:
+                risk_from_50 = min_risk
+                sl = wick_50 + risk_from_50 # Alziamo lo SL per garantire il buffer minimo
+
+            if risk_from_50 <= 0: return None
+            
+            tp = wick_50 - (risk_from_50 * 2.0)
+            
+            signal_data = create_signal_dict(ticker, tf, "bearish_wick", "Golden Wick (Sell Zone)", c_high, c_low, c_close, sl, tp, 1)
+            signal_data['entry_price'] = round(wick_50, 2)
+            signal_data['range_high'] = round(wick_100, 2)
+            signal_data['rr_ratio'] = 2.0
+            signal_data['diamond_score'] = "A++"
+            signal_data['session_tag'] = "Limit Order @ 50% Wick"
+
+        return signal_data
+
+    except Exception as e:
+        return None
+
 def create_signal_dict(ticker, tf, s_type, subtype, high, low, price, sl, tp, touches):
     return {
         "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
@@ -1292,6 +1365,9 @@ def check_open_trades():
 
 
 def main():
+    setup_logging()
+    setup_supabase()
+    
     # Fix console encoding on Windows for Emojis
     import sys
     if sys.platform.startswith('win'):

@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # Importiamo le funzioni di rilevamento dalla logica originale (scanner.py)
-from scanner import detect_macro_sweep, detect_tbs_setup
+from scanner import detect_macro_sweep, detect_tbs_setup, detect_golden_wick
 
 class TimeMachineBacktester:
     def __init__(self, ticker="EURUSD=X", interval="1h", period="730d", initial_capital=1000.0, risk_per_trade=0.0033):
@@ -32,13 +32,16 @@ class TimeMachineBacktester:
         Qui vive il tuo Bot originale. Valuta la 'historical_window' (che per lui è "tutto ciò che è successo finora").
         Ritorna un dict se trova un setup, altrimenti None.
         """
-        # 1. Prova Macro Sweeps per timeframe 1H
+        # 1. Prova Golden Wick (Priorità Alta per Limit Orders)
+        signal = detect_golden_wick(self.ticker, historical_window, "1H")
+        if signal: return signal
+
+        # 2. Prova Macro Sweeps per timeframe 1H
         signal = detect_macro_sweep(self.ticker, historical_window, "1H")
+        if signal: return signal
         
-        # 2. Se non c'è, prova TBS per timeframe 1H
-        if not signal:
-            signal = detect_tbs_setup(self.ticker, historical_window, "1H")
-            
+        # 3. Se non c'è, prova TBS per timeframe 1H
+        signal = detect_tbs_setup(self.ticker, historical_window, "1H")
         return signal
 
     def run(self, window_size=100):
@@ -51,20 +54,48 @@ class TimeMachineBacktester:
         print(f"[*] Capitale Iniziale: €{self.initial_capital:.2f} | Rischio per trade: {self.risk_per_trade*100:.2f}%")
         
         open_trade = None
+        pending_trade = None
         stats = {'win': 0, 'loss': 0, 'be': 0, 'total_r': 0.0}
         equity_curve = [0.0]
         capital_curve = [self.initial_capital]
         current_capital = self.initial_capital
 
-        # Iteriamo nel tempo, simulando l'arrivo di nuove candele
+        # --- 1. IL CUORE DEL BACKTEST (Sliding Window Loop) ---
         for i in range(window_size, len(self.data)):
-            current_time = self.data.index[i]
-            # Il bot vede solo fino alla candela *precedente* (la finestra attiva)
-            live_window = self.data.iloc[i-window_size : i]
-            # La candela corrente: ci serve per capire cosa succede "immediatamente dopo" nel Trade Manager
+            live_window = self.data.iloc[i-window_size:i]
             current_candle = self.data.iloc[i]
+            current_time = current_candle.name
             
-            # --- 3. IL TRADE MANAGER (La Macchina della Realtà) ---
+            # --- 2. GESTIONE ORDINE PENDENTE (Limit Orders) ---
+            if not open_trade and pending_trade:
+                entry_p = pending_trade['entry_price']
+                trade_type = pending_trade['type']
+                triggered = False
+                
+                if 'bullish' in trade_type or trade_type == 'LONG':
+                    if current_candle['Low'] <= entry_p: triggered = True
+                elif 'bearish' in trade_type or trade_type == 'SHORT':
+                    if current_candle['High'] >= entry_p: triggered = True
+                
+                if triggered:
+                    open_trade = pending_trade
+                    pending_trade = None
+                    open_trade['entry_time'] = current_time
+                    print(f"[{current_time}] ⚡ LIMIT ORDER ATTIVATO: {open_trade['type'].upper()} @ {entry_p}")
+                else:
+                    # Se il pending non è stato attivato, controlliamo se è stato invalidato da SL/TP
+                    sl = pending_trade['stop_loss']
+                    tp = pending_trade['take_profit']
+                    if 'bullish' in trade_type or trade_type == 'LONG':
+                        if current_candle['Low'] <= sl or current_candle['High'] >= tp:
+                            # print(f"[{current_time}] ❌ PENDING ORDER INVALIDATO (SL/TP hit prima dell'entry): {pending_trade['type'].upper()}")
+                            pending_trade = None
+                    elif 'bearish' in trade_type or trade_type == 'SHORT':
+                        if current_candle['High'] >= sl or current_candle['Low'] <= tp:
+                            # print(f"[{current_time}] ❌ PENDING ORDER INVALIDATO (SL/TP hit prima dell'entry): {pending_trade['type'].upper()}")
+                            pending_trade = None
+            
+            # --- 3. GESTIONE TRADE APERTO (Trade Manager) ---
             if open_trade:
                 trade_type = open_trade['type']
                 sl = open_trade['stop_loss']
@@ -145,18 +176,23 @@ class TimeMachineBacktester:
                 if open_trade:
                     continue 
 
-            # --- CERCA NUOVI SEGNALI SOLO SE FLAT ---
-            signal = self.detect_signal(live_window)
-            if signal:
-                # --- NUOVO FILTRO: PRENDI SOLO I TRADE A++ (Trend-Aligned) ---
-                if signal.get('diamond_score') != 'A++':
-                    continue  # Salta i trade contro-trend o mediocri
-                
-                # Salviamo i dettagli del trade aperto
-                open_trade = signal
-                open_trade['entry_time'] = current_time
-                entry_p = signal.get('entry_price', signal.get('price'))
-                print(f"[{current_time}] 🟢 APERTO TRADE {signal['type'].upper()} @ {entry_p} (SL: {signal['stop_loss']}, TP: {signal['take_profit']}, R: {signal['rr_ratio']})")
+            # --- 4. CERCA NUOVI SEGNALI SOLO SE FLAT ---
+            if not open_trade and not pending_trade:
+                signal = self.detect_signal(live_window)
+                if signal:
+                    # --- NUOVO FILTRO: PRENDI SOLO I TRADE A++ (Trend-Aligned) ---
+                    if signal.get('diamond_score') != 'A++':
+                        continue
+                    
+                    # Setup Pending per Golden Wick, Market per gli altri
+                    if 'wick' in signal['type']:
+                        pending_trade = signal
+                        print(f"[{current_time}] ⏳ PENDING LIMIT ORDER: {signal['type'].upper()} @ {signal['entry_price']} (SL: {signal['stop_loss']})")
+                    else:
+                        open_trade = signal
+                        open_trade['entry_time'] = current_time
+                        entry_p = signal.get('entry_price', signal.get('price'))
+                        print(f"[{current_time}] 🟢 APERTO TRADE {signal['type'].upper()} @ {entry_p} (SL: {signal['stop_loss']}, TP: {signal['take_profit']}, R: {signal['rr_ratio']})")
 
         print("\n[+] Simulazione Terminata. Calcolo risultati in corso...")
         self.print_report(stats, equity_curve, capital_curve)
