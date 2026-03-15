@@ -2,8 +2,10 @@ name: CRT Flow Intraday Scanner
 
 on:
   schedule:
-    # Gira al minuto 23 di ogni ora, dalle 09:00 UTC alle 21:00 UTC, lun-ven
+    # 1. Scanner Intraday: Gira ogni ora dalle 09:00 alle 21:00 UTC, lun-ven
     - cron: '23 9-21 * * 1-5'
+    # 2. DCA Screener: Gira una volta al giorno alle 01:00 UTC
+    - cron: '0 1 * * *'
   workflow_dispatch: # Ti permette di avviarlo a mano con un click per testare
 
 jobs:
@@ -25,7 +27,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Scanner
+      - name: Run Logic
         env:
           # Prende le chiavi dai Secrets standard di GitHub
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -33,4 +35,11 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scanner.py --all
+        run: |
+          if [ "${{ github.event.schedule }}" == "0 1 * * *" ]; then
+            echo "🚀 Running Daily DCA Screener..."
+            python dca_screener.py
+          else
+            echo "📊 Running Hourly Intraday Scanner..."
+            python scanner.py --all
+          fi
