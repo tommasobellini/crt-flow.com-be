@@ -12,10 +12,72 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 from notifications import send_telegram_alert
-from indicators import calculate_atr, get_wick_analysis, get_seasonality_score, calculate_rsi, check_divergence, calculate_adr_percent, detect_fvg_confluence, get_historical_seasonality
+from indicators import calculate_atr, get_historical_seasonality
 
 # SEASONALITY CACHE to avoid redundant API calls
 SEASONALITY_CACHE = {}
+
+# LIQUIDITY CACHE to avoid redundant HTF calls
+LIQUIDITY_CACHE = {}
+
+def prefetch_all_htf_liquidity(tickers):
+    """
+    Scarica i dati Daily (6 mesi) per TUTTI i ticker in una singola chiamata API
+    e pre-calcola i livelli di liquidità HTF, salvandoli nella LIQUIDITY_CACHE globale.
+    """
+    global LIQUIDITY_CACHE
+    logger.info(f"🌊 Pre-fetching dati Daily (6mo) in bulk per {len(tickers)} ticker (Calcolo HTF Pools)...")
+
+    try:
+        # BULK DOWNLOAD: 1 singola chiamata API!
+        data = yf.download(tickers, period="6mo", interval="1d", group_by='ticker', progress=False, threads=True)
+
+        if data.empty:
+            logger.warning("Nessun dato Daily scaricato nel pre-fetch.")
+            return
+
+        for ticker in tickers:
+            try:
+                # Gestione sicura del MultiIndex di yfinance
+                df = data[ticker] if len(tickers) > 1 else data
+                df = clean_df(df.dropna())
+
+                if df.empty or len(df) < 5:
+                    continue
+
+                # Calcolo dei livelli
+                pdh = to_f(df['High'].iloc[-2])
+                pdl = to_f(df['Low'].iloc[-2])
+
+                df_w = df.resample('W').agg({'High': 'max', 'Low': 'min'}).dropna()
+                pwh = to_f(df_w['High'].iloc[-2]) if len(df_w) >= 2 else None
+                pwl = to_f(df_w['Low'].iloc[-2]) if len(df_w) >= 2 else None
+
+                df_m = df.resample('ME').agg({'High': 'max', 'Low': 'min'}).dropna()
+                pmh = to_f(df_m['High'].iloc[-2]) if len(df_m) >= 2 else None
+                pml = to_f(df_m['Low'].iloc[-2]) if len(df_m) >= 2 else None
+
+                # Salvataggio diretto in memoria locale
+                LIQUIDITY_CACHE[ticker] = {
+                    "PDH": pdh, "PDL": pdl,
+                    "PWH": pwh, "PWL": pwl,
+                    "PMH": pmh, "PML": pml
+                }
+            except Exception as e:
+                pass # Ignoriamo silenziosamente i ticker difettosi
+
+        logger.info(f"✅ HTF Pools calcolati e cachati per {len(LIQUIDITY_CACHE)} ticker in 1 sola chiamata API.")
+
+    except Exception as e:
+        logger.error(f"Errore critico durante il prefetch HTF: {e}")
+
+def get_htf_liquidity_pools(ticker):
+    """
+    Legge i livelli HTF direttamente dalla memoria RAM (0 chiamate API).
+    """
+    if ticker in LIQUIDITY_CACHE:
+        return LIQUIDITY_CACHE[ticker]
+    return None
 
 def fetch_seasonality_with_cache(ticker):
     if ticker not in SEASONALITY_CACHE:
@@ -357,22 +419,15 @@ def detect_macro_sweep(ticker, df, tf, config=None):
         # --- 1. DATA AGGREGATION (RESAMPLING) ---
         agg_map = {'High': 'max', 'Low': 'min', 'Close': 'last', 'Open': 'first'}
         
-        # Weekly
-        df_w = df.resample('W').agg(agg_map).dropna()
-        if len(df_w) < 2: return None
-        prev_w = df_w.iloc[-2]
+        # HTF Pools from centralized helper
+        pools = get_htf_liquidity_pools(ticker)
+        if not pools: return None
 
-        # Daily (PDH/PDL for 1H timeframes)
-        prev_d = None
-        if tf == '1H':
-            df_d = df.resample('D').agg(agg_map).dropna()
-            if len(df_d) >= 2: prev_d = df_d.iloc[-2]
-
-        # Monthly (ME = Month End)
-        df_m = df.resample('ME').agg(agg_map).dropna() 
-        prev_m = None if len(df_m) < 2 else df_m.iloc[-2]
-
-        # Quarterly
+        prev_d = {"High": pools["PDH"], "Low": pools["PDL"]}
+        prev_w = {"High": pools["PWH"], "Low": pools["PWL"]}
+        prev_m = {"High": pools["PMH"], "Low": pools["PML"]}
+        
+        # Quarterly & Semi-Annual (Still aggregated locally for now or we could extend the helper)
         df_q = df.resample('QE').agg(agg_map).dropna()
         prev_q = None if len(df_q) < 2 else df_q.iloc[-2]
 
@@ -420,20 +475,18 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                      # Bearish: favor those with negative avg return or low win rate (<50%)
                      if m_stats.get('avg_return', 0) < 0: seas_score += 1
                      if m_stats.get('win_rate', 0) < 50: seas_score += 1
-                 
                  # Map level name to confluence code
                  confluence_code = "PWH" 
+                 if "daily" in level_name: confluence_code = "PDH"
                  if "monthly" in level_name: confluence_code = "PMH"
                  if "quarterly" in level_name: confluence_code = "PQH"
                  if "semi" in level_name: confluence_code = "6MH"
                  
-                 # Map importance to Diamond Score
-                 diamond_score = "B"
-                 if importance_score == "GOD_MODE": diamond_score = "A++"
-                 if importance_score == "A++": diamond_score = "A++"
-                 if importance_score == "A": diamond_score = "A+"
-
-                 sl = c_high * 1.005 # Aggiunto 0.5% Buffer
+                 # Calculate Dynamic Buffer using ATR
+                 atr = calculate_atr(df)
+                 buffer = atr * 1.5 if atr > 0 else (c_high * 0.005)
+                 
+                 sl = c_high + buffer
                  risk = sl - c_close
                  # NUOVO CODICE (Intraday Risk Sizing)
                  min_risk = c_close * 0.004
@@ -441,6 +494,13 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if risk < min_risk:
                      sl = c_close + min_risk
                      risk = sl - c_close
+                 
+                 # Map importance to Diamond Score
+                 diamond_score = "B"
+                 if importance_score == "GOD_MODE": diamond_score = "A++ (Institution)"
+                 if importance_score == "A++": diamond_score = "A++ (Diamond Edge)"
+                 if importance_score == "A": diamond_score = "A+"
+                 if importance_score == "Daily": diamond_score = "A"
 
                  # --- TARGET STRUTTURALE (Draw on Liquidity) ---
                  # Cerchiamo il minimo più basso delle ultime 25 candele
@@ -520,8 +580,12 @@ def detect_macro_sweep(ticker, df, tf, config=None):
                  if importance_score == "A++": diamond_score = "A++"
                  if importance_score == "A": diamond_score = "A+"
 
+                 # Calculate Dynamic Buffer using ATR
+                 atr = calculate_atr(df)
+                 buffer = atr * 1.5 if atr > 0 else (c_close * 0.005)
+
                  # Swing Trading Check: Min risk 2% of price for big moves
-                 sl = c_low * 0.995 # Aggiunto 0.5% Buffer
+                 sl = c_low - buffer
                  risk = c_close - sl
                  # NUOVO CODICE (Intraday Risk Sizing)
                  min_risk = c_close * 0.004
@@ -607,7 +671,7 @@ def detect_macro_sweep(ticker, df, tf, config=None):
 
         # PDH/PDL (Only 1H)
         if prev_d is not None:
-             res_d = check_sweep("daily", to_f(prev_d['High']), to_f(prev_d['Low']), "B")
+             res_d = check_sweep("daily", to_f(prev_d['High']), to_f(prev_d['Low']), "Daily")
              if res_d: results.append(res_d)
 
         # Return the best signal based on diamond_score
@@ -624,14 +688,17 @@ def detect_macro_sweep(ticker, df, tf, config=None):
     return None
 
 
-def detect_tbs_setup(ticker, df, tf, config=None):
+def detect_tbs_setup(ticker, df, tf, config=None, htf_pools=None):
     """
     Rileva il pattern TBS (Turtle Body Soup) ad "alta probabilità".
     """
-    # Permettiamo allo scanner di analizzare sia il Daily che l'Orario
-    if tf not in ['1D', '1H']: return None
+    # Permettiamo allo scanner di analizzare sia l'Orario
+    if tf != '1H': return None
     df = clean_df(df)
     if df is None or len(df) < 20: return None
+    
+    if not htf_pools:
+        htf_pools = get_htf_liquidity_pools(ticker)
 
     # FILTRO ORARIO (Killzones)
     # Assumendo che i dati yfinance arrivino in orario locale NY
@@ -645,19 +712,13 @@ def detect_tbs_setup(ticker, df, tf, config=None):
         recent_df = df.iloc[-lookback:-2]
         if recent_df.empty: return None
 
-        # --- NUOVA LOGICA: LIQUIDITÀ ISTITUZIONALE (PDH / PDL) ---
+        # --- NUOVA LOGICA: LIQUIDITÀ ISTITUZIONALE CENTRALIZZATA ---
         pivot_high = None
         pivot_low = None
         
-        if tf == '1H':
-            df_d = df.resample('D').agg({'High': 'max', 'Low': 'min'}).dropna()
-            if len(df_d) >= 2:
-                pivot_high = to_f(df_d.iloc[-2]['High'])
-                pivot_low = to_f(df_d.iloc[-2]['Low'])
-        elif tf == '1D':
-            if len(df) >= 3:
-                pivot_high = to_f(df.iloc[-3]['High'])
-                pivot_low = to_f(df.iloc[-3]['Low'])
+        if htf_pools:
+            pivot_high = htf_pools.get("PDH")
+            pivot_low = htf_pools.get("PDL")
                 
         if pivot_high is None or pivot_low is None:
             return None
@@ -728,7 +789,19 @@ def detect_tbs_setup(ticker, df, tf, config=None):
              is_reversal_down = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
 
         if is_breakout_up and is_reversal_down:
-            sl = max(b_high, r_high)
+            # --- 🚀 FILTRO MOMENTUM (Anti-Marubozu) ---
+            # Se la breakout_candle è troppo forte, è un vero breakdown/breakout
+            b_total_range = b_high - b_low
+            b_body = abs(b_close - b_open)
+            if b_total_range > 0 and (b_body / b_total_range) > 0.85:
+                # Marubozu detected: Troppa inerzia, skippiamo la trappola
+                return None
+            
+            # Calculate Dynamic Buffer using ATR
+            atr = calculate_atr(df)
+            buffer = atr * 1.5 if atr > 0 else (r_close * 0.005)
+
+            sl = max(b_high, r_high) + buffer
             risk = sl - r_close
             # NUOVO CODICE (Intraday Risk Sizing): 0.4%
             min_risk = r_close * 0.004
@@ -831,7 +904,17 @@ def detect_tbs_setup(ticker, df, tf, config=None):
              is_reversal_up = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
 
         if is_breakout_down and is_reversal_up:
-            sl = min(b_low, r_low)
+            # --- 🚀 FILTRO MOMENTUM (Anti-Marubozu) ---
+            b_total_range = b_high - b_low
+            b_body = abs(b_close - b_open)
+            if b_total_range > 0 and (b_body / b_total_range) > 0.85:
+                return None
+
+            # Calculate Dynamic Buffer using ATR
+            atr = calculate_atr(df)
+            buffer = atr * 1.5 if atr > 0 else (r_close * 0.005)
+
+            sl = min(b_low, r_low) - buffer
             risk = r_close - sl
             # NUOVO CODICE (Intraday Risk Sizing)
             min_risk = r_close * 0.004
@@ -900,7 +983,7 @@ def detect_tbs_setup(ticker, df, tf, config=None):
 
     return None
 
-def detect_crt_models(ticker, df, tf, config=None):
+def detect_crt_models(ticker, df, tf, config=None, htf_pools=None):
     """
     Rileva i 4 modelli classici CRT (Candle Range Theory) come da manuale.
     Cerca una 'Mother Bar' direzionale seguita da una rottura del suo High/Low.
@@ -909,6 +992,10 @@ def detect_crt_models(ticker, df, tf, config=None):
     if tf not in ['1D', '1H']: return None
     df = clean_df(df)
     if df is None or len(df) < 15: return None
+    
+    # Check if we have pools for the HTF filter
+    if not htf_pools:
+        htf_pools = get_htf_liquidity_pools(ticker)
 
     try:
         # La candela che fa scattare l'alert è l'ultima (quella appena chiusa)
@@ -959,8 +1046,12 @@ def detect_crt_models(ticker, df, tf, config=None):
                         elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
                         elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
 
+                        # Calculate Dynamic Buffer using ATR
+                        atr = calculate_atr(df)
+                        buffer = atr * 0.5 if atr > 0 else (t_close * 0.003)
+
                         # Stop Loss calcolato sul punto più basso dell'intera formazione strutturale
-                        sl = min([crt_low, t_low] + [to_f(r['Low']) for _, r in intermediate_candles.iterrows()])
+                        sl = min([crt_low, t_low] + [to_f(r['Low']) for _, r in intermediate_candles.iterrows()]) - buffer
                         risk = t_close - sl
                         
                         # NUOVO CODICE (Intraday Risk Sizing)
@@ -974,7 +1065,30 @@ def detect_crt_models(ticker, df, tf, config=None):
                         actual_rr = 2.0
                         # ----------------------------------------------
 
+                        # --- FILTRO LIQUIDITÀ HTF (Il valore aggiunto) ---
+                        sweep_level = None
+                        if htf_pools:
+                            # Controlliamo se la Mother Bar o la candela precedente hanno "sweeppato" un livello HTF
+                            for p_name, p_val in htf_pools.items():
+                                if p_val is None: continue
+                                # Bullish Setup: Cerchiamo sweep sotto PDL, PWL, PML
+                                if "L" in p_name:
+                                    # Se una delle ultime 3 candele è andata sotto il livello
+                                    lookback_window = df.iloc[-num_candles-2:-1]
+                                    if lookback_window['Low'].min() < p_val and mb_close > p_val:
+                                        sweep_level = p_name
+                                        break
+                        
                         signal_data = create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        
+                        if sweep_level:
+                            signal_data['subtype'] = f"TBS su {sweep_level} + CRT Confirmation"
+                            signal_data['diamond_score'] = "A++ (Diamond Edge)"
+                            signal_data['confluence_level'] = f"Liquidity Sweep confirmed on {sweep_level}"
+                        else:
+                            # Se non c'è sweep, abbassiamo il grado per incoraggiare lo sniper mode
+                            signal_data['diamond_score'] = "B" 
+
                         signal_data['rr_ratio'] = round(actual_rr, 1)
                         signal_data['trigger_candles'] = json.dumps([
                             int(df.index[-i].timestamp()), # Mother Bar
@@ -1005,7 +1119,11 @@ def detect_crt_models(ticker, df, tf, config=None):
                         elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
                         elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
 
-                        sl = max([crt_high, t_high] + [to_f(r['High']) for _, r in intermediate_candles.iterrows()])
+                        # Calculate Dynamic Buffer using ATR
+                        atr = calculate_atr(df)
+                        buffer = atr * 0.5 if atr > 0 else (t_close * 0.003)
+
+                        sl = max([crt_high, t_high] + [to_f(r['High']) for _, r in intermediate_candles.iterrows()]) + buffer
                         risk = sl - t_close
                         
                         # NUOVO CODICE (Intraday Risk Sizing)
@@ -1019,7 +1137,27 @@ def detect_crt_models(ticker, df, tf, config=None):
                         actual_rr = 2.0
                         # ----------------------------------------------
 
+                        # --- FILTRO LIQUIDITÀ HTF (Bearish) ---
+                        sweep_level = None
+                        if htf_pools:
+                            for p_name, p_val in htf_pools.items():
+                                if p_val is None: continue
+                                # Bearish Setup: Cerchiamo sweep sopra PDH, PWH, PMH
+                                if "H" in p_name:
+                                    lookback_window = df.iloc[-num_candles-2:-1]
+                                    if lookback_window['High'].max() > p_val and mb_close < p_val:
+                                        sweep_level = p_name
+                                        break
+
                         signal_data = create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
+                        
+                        if sweep_level:
+                            signal_data['subtype'] = f"TBS su {sweep_level} + CRT Confirmation"
+                            signal_data['diamond_score'] = "A++ (Diamond Edge)"
+                            signal_data['confluence_level'] = f"Liquidity Sweep confirmed on {sweep_level}"
+                        else:
+                            signal_data['diamond_score'] = "B"
+
                         signal_data['rr_ratio'] = round(actual_rr, 1)
                         signal_data['trigger_candles'] = json.dumps([
                             int(df.index[-i].timestamp()), # Mother Bar
@@ -1066,7 +1204,11 @@ def detect_golden_wick(ticker, df, tf, config=None):
             wick_100 = c_low
             wick_50 = c_low + (lower_wick * 0.5)
             
-            sl = wick_100 * 0.998
+            # Calculate Dynamic Buffer using ATR
+            atr = calculate_atr(df)
+            buffer = atr * 0.3 if atr > 0 else (wick_50 * 0.002)
+            
+            sl = wick_100 - buffer
             risk_from_50 = wick_50 - sl
             
             # NUOVO FIX: Intraday Risk Sizing di sicurezza
@@ -1093,7 +1235,11 @@ def detect_golden_wick(ticker, df, tf, config=None):
             wick_100 = c_high
             wick_50 = c_high - (upper_wick * 0.5)
             
-            sl = wick_100 * 1.002
+            # Calculate Dynamic Buffer using ATR
+            atr = calculate_atr(df)
+            buffer = atr * 0.3 if atr > 0 else (wick_50 * 0.002)
+            
+            sl = wick_100 + buffer
             risk_from_50 = sl - wick_50
             
             # NUOVO FIX: Intraday Risk Sizing di sicurezza
@@ -1622,6 +1768,10 @@ def main():
         logger.warning("Nessun ticker ha superato il filtro Market Cap. Esco.")
         return
     
+    # --- NOVITÀ: PRE-FETCH HTF POOLS ---
+    prefetch_all_htf_liquidity(tickers)
+    # -----------------------------------
+    
     all_detected_signals = []
     expired_signals_updates = []
 
@@ -1694,6 +1844,9 @@ def main():
                     # De-commenta il logger qui sotto se vuoi vedere nel terminale i ticker ignorati
                     # logger.info(f"Skipping {ticker}: Trade già in corso.") 
                     continue
+
+                # C. Pre-fetch HTF Liquidity Pools for filters
+                htf_pools = get_htf_liquidity_pools(ticker)
                 # -----------------------------------------------------
 
                 # B. Helper per l'allineamento al Trend
@@ -1741,7 +1894,7 @@ def main():
                     logger.info(f"💎 {ticker} [{tf}]: {signal['liquidity_tier']} Sweep - Score A++")
 
                 # C. Detection TBS Pattern
-                tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config)
+                tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config, htf_pools)
                 if tbs_signal:
                     # VOLUME BYPASS: Se l'asset non ha volumi affidabili, ignoriamo il filtro rvol
                     rel_vol = tbs_signal.get('rel_volume', 0)
@@ -1765,7 +1918,7 @@ def main():
                     logger.info(f"🐢 {ticker} [{tf}]: TBS Pattern - Score A++")
 
                 # D. Detection 4 Models CRT
-                crt_signal = detect_crt_models(ticker, df, tf, scanner_config)
+                crt_signal = detect_crt_models(ticker, df, tf, scanner_config, htf_pools)
                 if crt_signal:
                     crt_signal['market_bias'] = market_bias
                     crt_signal = apply_trend_alignment(crt_signal, market_bias)
@@ -1799,6 +1952,7 @@ def main():
             # Group by both result and exit_reason to preserve autopsy data
             updates_by_group = {}
             be_updates = []
+            status_updates = []
             
             for u in expired_signals_updates:
                 if 'result' in u:
@@ -1811,6 +1965,8 @@ def main():
                     updates_by_group[group_key].append(u['id'])
                 elif 'stop_loss' in u:
                     be_updates.append(u)
+                elif 'status' in u:
+                    status_updates.append(u)
                 
             current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
             
@@ -1827,18 +1983,17 @@ def main():
             
             # 2. Update status and sl moves (Individually or batching if many)
             for u in be_updates:
-                update_payload = {}
-                if 'stop_loss' in u: update_payload["stop_loss"] = u['stop_loss']
-                if 'status' in u: update_payload["status"] = u['status']
-                if 'exit_reason' in u: update_payload["exit_reason"] = u['exit_reason']
-                
-                if update_payload:
-                    supabase.table("crt_signals").update(update_payload).eq("id", u['id']).execute()
+                supabase.table("crt_signals").update({"stop_loss": u['stop_loss']}).eq("id", u['id']).execute()
+            
+            for u in status_updates:
+                supabase.table("crt_signals").update({"status": u['status']}).eq("id", u['id']).execute()
                     
             if updates_by_group:
                 logger.info(f"DB aggiornato con risultati: {list(updates_by_group.keys())}")
             if be_updates:
                 logger.info(f"DB aggiornato con {len(be_updates)} spostamenti a BE.")
+            if status_updates:
+                logger.info(f"DB aggiornato con {len(status_updates)} inneschi ordini Limite.")
                 
             # Final stats reporting
             win_count = sum(len(ids) for (res, reason), ids in updates_by_group.items() if res == 'WIN')
