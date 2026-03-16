@@ -40,6 +40,7 @@ jobs:
             echo "🚀 Running Daily DCA Screener..."
             python dca_screener.py
           else
-            echo "📊 Running Hourly Intraday Scanner..."
+            echo "📊 Running Hourly Intraday Scanner & DCA Monitor..."
             python scanner.py --all
+            python dca_notifier.py
           fi

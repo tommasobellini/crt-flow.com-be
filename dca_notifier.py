@@ -105,63 +105,72 @@ def send_dca_notification(symbol, level, price, amount):
             logger.error(f"Failed to send Telegram: {e}")
 
 def monitor_plans():
-    """Main loop to monitor asset prices and trigger alerts."""
-    logger.info("Starting DCA Monitor...")
+    """Fetches active plans, checks prices, and sends notifications once."""
+    logger.info("Starting one-shot DCA Monitor...")
     
-    while True:
-        plans = get_active_plans()
-        if not plans:
-            logger.info("No active plans found. Sleeping...")
-            time.sleep(300) # Sleep 5 min
-            continue
+    plans = get_active_plans()
+    if not plans:
+        logger.info("No active plans found. Exiting.")
+        return
 
-        # Group by symbol to minimize yfinance calls
-        symbols = list(set([p['symbol'] for p in plans]))
-        prices = {}
-        if symbols:
-            try:
-                # Bulk download current prices
-                # Use group_by="ticker" to keep structure consistent
-                data = yf.download(symbols, period="1d", group_by="ticker", progress=False)
-                for s in symbols:
-                    try:
-                        # Handle single vs multi ticker response from yfinance
-                        if len(symbols) > 1:
-                            prices[s] = float(data[s]['Close'].iloc[-1])
-                        else:
-                            prices[s] = float(data['Close'].iloc[-1])
-                    except Exception as e:
-                        logger.error(f"Error extracting price for {s}: {e}")
-            except Exception as e:
-                logger.error(f"Error in bulk download: {e}")
-
-        for plan in plans:
-            symbol = plan['symbol']
-            current_price = prices.get(symbol)
-            if not current_price: continue
-
-            levels = plan.get('levels', [])
-            updated = False
+    # Group by symbol to minimize yfinance calls
+    symbols = list(set([p['symbol'] for p in plans]))
+    prices = {}
+    if symbols:
+        try:
+            # Bulk download current prices (previous day data for better close coverage)
+            logger.info(f"Downloading prices for: {symbols}")
+            data = yf.download(symbols, period="2d", interval="1d", group_by="ticker", progress=False)
             
-            for level in levels:
-                # Trigger logic: Price <= Trigger Price AND status == 'pending'
-                if current_price <= level['price'] and level.get('status') == 'pending':
-                    logger.info(f"🔥 TRIGGER: {symbol} Level {level['level']} hit! Current: {current_price} Target: {level['price']}")
+            for s in symbols:
+                try:
+                    # Extract last Close price, ensuring no NaNs
+                    ticker_data = data[s] if len(symbols) > 1 else data
+                    close_prices = ticker_data['Close'].dropna()
                     
-                    # Update status to notified
-                    level['status'] = 'notified'
-                    level['notified_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-                    updated = True
-                    
-                    # Send notification
-                    send_dca_notification(symbol, level['level'], level['price'], level['amount'])
+                    if not close_prices.empty:
+                        prices[s] = float(close_prices.iloc[-1])
+                    else:
+                        logger.warning(f"No valid Close price found for {s}")
+                except Exception as e:
+                    logger.error(f"Error extracting price for {s}: {e}")
+        except Exception as e:
+            logger.error(f"Error in bulk download: {e}")
 
-            if updated:
-                update_plan_levels(plan['id'], levels)
+    for plan in plans:
+        symbol = plan['symbol']
+        current_price = prices.get(symbol)
+        if not current_price: continue
 
-        logger.info("Cycle complete. Sleeping for 1 hour...")
-        time.sleep(3600) # Check every hour
+        levels = plan.get('levels', [])
+        updated = False
+        
+        for level in levels:
+            # FIX 1: Correct JSONB field names
+            # FIX 2: Skip Level 1 (Starter Position)
+            level_num = level.get('level', 1)
+            trigger_price = level.get('trigger_price', 0)
+            allocate_amount = level.get('allocate_amount', 0)
+
+            if level_num == 1:
+                continue
+
+            # Trigger logic: Price <= Trigger Price AND status == 'pending'
+            if current_price <= trigger_price and level.get('status') == 'pending':
+                logger.info(f"🔥 TRIGGER: {symbol} Level {level_num} hit! Current: {current_price} Target: {trigger_price}")
+                
+                # Update status to notified
+                level['status'] = 'notified'
+                level['notified_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                updated = True
+                
+                # Send notification
+                send_dca_notification(symbol, level_num, trigger_price, allocate_amount)
+
+        if updated:
+            update_plan_levels(plan['id'], levels)
+
+    logger.info("Monitoring cycle complete.")
 
 if __name__ == "__main__":
-    # Note: Ensure .env is loaded in production
     monitor_plans()
