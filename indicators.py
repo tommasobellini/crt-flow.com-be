@@ -251,3 +251,59 @@ def detect_fvg_confluence(df: pd.DataFrame, type_direction: str) -> bool:
         return hit
     except:
         return False
+
+import numpy as np
+
+def calculate_poc(df: pd.DataFrame, lookback: int = 50, bins: int = 50) -> float:
+    """
+    Calcola il Point of Control (POC) sulle ultime 'lookback' candele.
+    Il POC è il livello di prezzo dove è stato scambiato più volume.
+    """
+    try:
+        # Assicuriamoci che ci sia la colonna Volume e che non sia vuota
+        if 'Volume' not in df.columns or df['Volume'].sum() == 0:
+            return None
+            
+        recent_df = df.iloc[-lookback:]
+        
+        min_price = float(recent_df['Low'].min())
+        max_price = float(recent_df['High'].max())
+        
+        if min_price == max_price:
+            return min_price
+            
+        # Creiamo i "bin" (livelli di prezzo)
+        price_bins = np.linspace(min_price, max_price, bins)
+        volume_profile = np.zeros(bins - 1)
+        
+        for _, row in recent_df.iterrows():
+            v = float(row['Volume'])
+            if v == 0: continue
+                
+            l = float(row['Low'])
+            h = float(row['High'])
+            
+            # Troviamo a quali bin appartiene l'escursione di questa candela
+            low_idx = np.digitize(l, price_bins) - 1
+            high_idx = np.digitize(h, price_bins) - 1
+            
+            # Assicuriamoci che gli indici siano nei limiti
+            low_idx = max(0, min(low_idx, bins - 2))
+            high_idx = max(0, min(high_idx, bins - 2))
+            
+            # Distribuiamo il volume della candela equamente sui livelli che ha attraversato
+            if high_idx == low_idx:
+                volume_profile[low_idx] += v
+            else:
+                vol_per_bin = v / (high_idx - low_idx + 1)
+                for i in range(low_idx, high_idx + 1):
+                    volume_profile[i] += vol_per_bin
+                    
+        # Troviamo l'indice del bin con il volume massimo
+        poc_idx = np.argmax(volume_profile)
+        # Il prezzo POC è il punto medio di quel bin
+        poc_price = (price_bins[poc_idx] + price_bins[poc_idx + 1]) / 2.0
+        
+        return float(poc_price)
+    except Exception as e:
+        return None
