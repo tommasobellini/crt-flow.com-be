@@ -11,6 +11,9 @@ import pandas as pd
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+import sys
+import concurrent.futures
+import pandas_ta as ta
 from notifications import send_telegram_alert
 from indicators import calculate_atr, get_historical_seasonality
 
@@ -112,9 +115,7 @@ def setup_logging():
     logger.addHandler(file_handler)
 
     # Console Handler - Force UTF-8 for Windows compatibility (Emojis)
-    import sys
     if sys.platform == "win32":
-        import io
         try:
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
             sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
@@ -685,492 +686,135 @@ def detect_macro_sweep(ticker, df, tf, config=None):
     except Exception as e:
         pass
 
-    return None
 
 
-def detect_tbs_setup(ticker, df, tf, config=None, htf_pools=None):
+def detect_smc_orderpairing(ticker, df, tf, config=None, htf_pools=None):
     """
-    Rileva il pattern TBS (Turtle Body Soup) ad "alta probabilità".
+    Rileva esattamente il pattern 'CRT with TurtleSoup / Orderpairing'.
+    Regole ferree:
+    1. DEVE esserci un OHP (Old High Purged) o OLP (Old Low Purged).
+    2. L'entrata NON è a mercato, ma un Limit Order al 50% della candela CRT.
+    3. Lo Stop Loss usa l'ATR per evitare i 'Wicked Out' (Caccia agli stop).
     """
-    # Permettiamo allo scanner di analizzare sia l'Orario
-    if tf != '1H': return None
+    if tf not in ['1H', '1D']: return None
     df = clean_df(df)
     if df is None or len(df) < 20: return None
     
     if not htf_pools:
         htf_pools = get_htf_liquidity_pools(ticker)
-
-    # FILTRO ORARIO (Killzones)
-    # Assumendo che i dati yfinance arrivino in orario locale NY
-    current_hour = df.index[-1].hour
-    if current_hour not in [9, 10, 11, 13, 14, 15]:
-        return None
+    if not htf_pools: return None
 
     try:
-        # Troviamo i pivot recenti (ultime 20 candele, escludendo le ultime 2 che sono il setup)
-        lookback = 20
-        recent_df = df.iloc[-lookback:-2]
-        if recent_df.empty: return None
+        # 1. Calcolo ATR per il buffer dello Stop Loss (La cura per il 37% Wicked Out)
+        atr_series = ta.atr(df['High'], df['Low'], df['Close'], length=14)
+        if atr_series is None or atr_series.empty: return None
+        atr_val = float(atr_series.iloc[-1])
 
-        # --- NUOVA LOGICA: LIQUIDITÀ ISTITUZIONALE CENTRALIZZATA ---
-        pivot_high = None
-        pivot_low = None
-        
-        if htf_pools:
-            pivot_high = htf_pools.get("PDH")
-            pivot_low = htf_pools.get("PDL")
-                
-        if pivot_high is None or pivot_low is None:
+        # Analizziamo la candela appena chiusa (La potenziale CRT Candle)
+        crt_candle = df.iloc[-1]
+        c_open, c_close = to_f(crt_candle['Open']), to_f(crt_candle['Close'])
+        c_high, c_low = to_f(crt_candle['High']), to_f(crt_candle['Low'])
+        c_range = c_high - c_low
+
+        if c_range == 0: return None
+
+        # 2. FILTRO "TREND FAILURE" (La cura per il 53% Full Body Break)
+        # Se il corpo è > 80% del range (Marubozu), è inerzia pura, non c'è rifiuto. Scartiamo.
+        c_body = abs(c_close - c_open)
+        if (c_body / c_range) > 0.80:
             return None
-        # ---------------------------------------------------------
 
-        # Calcoliamo la Media Mobile a 20 periodi del Volume per il breakout
-        if 'Volume' in df.columns:
-            vol_data = df['Volume']
-            if hasattr(vol_data, 'iloc') and len(vol_data.shape) > 1: # DataFrame case
-                vol_data = vol_data.iloc[:, 0]
-            avg_vol_20 = float(vol_data.rolling(20).mean().iloc[-2])
-        else:
-            avg_vol_20 = 0
-
-        # Candele di setup
-        breakout_candle = df.iloc[-2]
-        reversal_candle = df.iloc[-1]
-
-        # Estrai prezzi setup (assicurandosi che siano scalari)
-        b_open = to_f(breakout_candle['Open'])
-        b_close = to_f(breakout_candle['Close'])
-        b_high = to_f(breakout_candle['High'])
-        b_low = to_f(breakout_candle['Low'])
-        
-        r_open = to_f(reversal_candle['Open'])
-        r_close = to_f(reversal_candle['Close'])
-        r_high = to_f(reversal_candle['High'])
-        r_low = to_f(reversal_candle['Low'])
-
-        # BEARISH TBS (Short) - Ricerca di uno Swing High precedente
-        # (PDH calcolato all'inizio della funzione)
-        
-        # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
-        # Usiamo .iloc[:, 0] se è un DataFrame per evitare ambiguità
-        high_vals = recent_df['High']
-        if isinstance(high_vals, pd.DataFrame): high_vals = high_vals.iloc[:, 0]
-        
-        touches_high = int((high_vals >= pivot_high * 0.99).sum())
-        is_high_prob_consolidation = touches_high >= 2
-        
-        # Check volume breakout: Il volume della trappola era superiore alla media?
-        if 'Volume' in breakout_candle and avg_vol_20 > 0:
-            # Filtro RVOL > 1.3 (Volume 30% superiore alla media)
-            if breakout_candle['Volume'] < (avg_vol_20 * 1.3):
-                return None
-            high_volume_breakout = True
-        else:
-            high_volume_breakout = False
-        
-        # Regola Bearish:
-        # 1. Breakout candle rompe al rialzo e CHIUDE SOPRA il pivot_high
-        is_breakout_up = to_b(b_close > pivot_high) and to_b(b_open < b_close)
-        
-        # Calculate tentative risk early for strength check
-        tentative_risk_bearish = max(b_high, r_high) - r_close
-        if tentative_risk_bearish <= 0: tentative_risk_bearish = r_close * 0.01
-
-        # 2. Reversal candle inverte e CHIUDE SOTTO il pivot_high (Tarta Soup) in modo forte
-        is_reversal_down = to_b(r_close < (pivot_high - tentative_risk_bearish * 0.1)) and to_b(r_close < r_open)
-
-        # Filtro Golden Wick (La wick superiore deve essere > 40% del range totale della candela di reversal)
-        r_total_range = r_high - r_low
-        upper_wick = r_high - max(r_open, r_close)
-        is_golden_wick = False
-        if r_total_range > 0 and (upper_wick / r_total_range) >= 0.40:
-             is_golden_wick = True
-        else:
-             is_reversal_down = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
-
-        if is_breakout_up and is_reversal_down:
-            # --- 🚀 FILTRO MOMENTUM (Anti-Marubozu) ---
-            # Se la breakout_candle è troppo forte, è un vero breakdown/breakout
-            b_total_range = b_high - b_low
-            b_body = abs(b_close - b_open)
-            if b_total_range > 0 and (b_body / b_total_range) > 0.85:
-                # Marubozu detected: Troppa inerzia, skippiamo la trappola
-                return None
+        # --- SETUP SHORT (Bearish TurtleSoup / OHP) ---
+        # Condizione: La candela deve chiudere rossa (c_close < c_open)
+        if c_close < c_open:
+            swept_level = None
             
-            # Calculate Dynamic Buffer using ATR
-            atr = calculate_atr(df)
-            buffer = atr * 1.5 if atr > 0 else (r_close * 0.005)
-
-            sl = max(b_high, r_high) + buffer
-            risk = sl - r_close
-            # NUOVO CODICE (Intraday Risk Sizing): 0.4%
-            min_risk = r_close * 0.004
-            if risk < min_risk:
-                risk = min_risk
-                sl = r_close + risk
-
-            # --- TARGET MECCANICO (R/R Fisso 1:2) ---
-            tp = r_close - (risk * 2.0)
-            reward = r_close - tp
-            actual_rr = 2.0
-            # ----------------------------------------------
+            # Cerca se ha purgato un OLD HIGH (OHP)
+            for p_name, p_val in htf_pools.items():
+                if p_val is None: continue
+                if "H" in p_name: # PDH, PWH, PMH
+                    # Regola OHP: Il massimo ha rotto il livello, ma il corpo ha chiuso SOTTO
+                    if c_high > p_val and c_close < p_val:
+                        swept_level = p_name
+                        break
             
-            # Entry Validation Rule: Did the reversal candle also break the low of the breakout candle?
-            is_validated = r_close < b_low or r_low < b_low
-            confluence_level = "TBS VALIDATED" if is_validated else "TBS"
-            
-            # Dinamic Diamond Score
-            # Se ha consolidato E rompe con volumi alti, è un pattern d'élite.
-            diamond_score = "A++" if (to_b(is_high_prob_consolidation) and to_b(high_volume_breakout)) else "A"
-            if not is_high_prob_consolidation and not high_volume_breakout:
-                diamond_score = "B" # Setup base
+            if swept_level:
+                # LA MAGIA DELL'IMMAGINE 2: Entrata al 50% della CRT Candle
+                crt_50_level = c_low + (c_range * 0.5)
                 
-            # Calcola quanto è grande il corpo rispetto al range totale
-            body_size = abs(r_close - r_open)
-            total_range = r_high - r_low
-            body_ratio = body_size / total_range if total_range > 0 else 0
-            if body_ratio > 0.6:
-                diamond_score = "A+++"
-
-            return {
-                "symbol": ticker,
-                "timeframe": tf,
-                "type": "bearish_tbs",
-                "subtype": "tbs_setup",
-                "range_high": pivot_high,
-                "range_low": pivot_low,
-                "price": r_close,
-                "entry_price": r_close,
-                "result": None,
-                "is_active": True,
-                "stop_loss": round(sl, 2),
-                "take_profit": round(tp, 2),
-                "rr_ratio": round(actual_rr, 1),
-                "liquidity_tier": "Daily",
-                "session_tag": "TBS Pattern",
-                "has_divergence": False,
-                "seasonality_score": 0,
-                "diamond_score": diamond_score,
-                "confluence_level": confluence_level,
-                "fvg_detected": False,
-                "hitting_fvg": False,
-                "smt_divergence": False,
-                "adr_percent": 0,
-                "rel_volume": int(breakout_candle.get('Volume', 0) / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
-                "volatility_warning": False,
-                "is_golden_wick": True,
-                "touches": int(touches_high),
-                "market_bias": None,
-                "max_favorable_excursion": 0.0
-            }
-
-        # BULLISH TBS (Long) - Ricerca di uno Swing Low precedente
-        # (PDL calcolato all'inizio della funzione)
-        
-        # Check consolidamento: Quante volte il prezzo ha "toccato" l'area dell'1% del pivot?
-        low_vals = recent_df['Low']
-        if isinstance(low_vals, pd.DataFrame): low_vals = low_vals.iloc[:, 0]
-
-        touches_low = int((low_vals <= pivot_low * 1.01).sum())
-        is_high_prob_consolidation = touches_low >= 2
-        
-        # Check volume breakout: Il volume della trappola era superiore alla media?
-        if 'Volume' in breakout_candle and avg_vol_20 > 0:
-            # Filtro RVOL > 1.3 (Volume 30% superiore alla media)
-            if breakout_candle['Volume'] < (avg_vol_20 * 1.3):
-                return None
-            high_volume_breakout = True
-        else:
-            high_volume_breakout = False
-        
-        # Regola Bullish:
-        # 1. Breakout candle rompe al ribasso e CHIUDE SOTTO il pivot_low
-        is_breakout_down = to_b(b_close < pivot_low) and to_b(b_open > b_close)
-        
-        # Calculate tentative risk early for strength check
-        tentative_risk_bullish = r_close - min(b_low, r_low)
-        if tentative_risk_bullish <= 0: tentative_risk_bullish = r_close * 0.01
-
-        # 2. Reversal candle inverte e CHIUDE SOPRA il pivot_low in modo forte
-        is_reversal_up = to_b(r_close > (pivot_low + tentative_risk_bullish * 0.1)) and to_b(r_close > r_open)
-
-        # Filtro Golden Wick (La wick inferiore deve essere > 40% del range totale della candela di reversal)
-        r_total_range = r_high - r_low
-        lower_wick = min(r_open, r_close) - r_low
-        is_golden_wick = False
-        if r_total_range > 0 and (lower_wick / r_total_range) >= 0.40:
-             is_golden_wick = True
-        else:
-             is_reversal_up = False # Se non c'è una chiara wick di rifiuto, invalidiamo il segnale
-
-        if is_breakout_down and is_reversal_up:
-            # --- 🚀 FILTRO MOMENTUM (Anti-Marubozu) ---
-            b_total_range = b_high - b_low
-            b_body = abs(b_close - b_open)
-            if b_total_range > 0 and (b_body / b_total_range) > 0.85:
-                return None
-
-            # Calculate Dynamic Buffer using ATR
-            atr = calculate_atr(df)
-            buffer = atr * 1.5 if atr > 0 else (r_close * 0.005)
-
-            sl = min(b_low, r_low) - buffer
-            risk = r_close - sl
-            # NUOVO CODICE (Intraday Risk Sizing)
-            min_risk = r_close * 0.004
-            if risk < min_risk:
-                risk = min_risk
-                sl = r_close - risk
-
-            # --- TARGET MECCANICO (R/R Fisso 1:2) ---
-            tp = r_close + (risk * 2.0)
-            reward = tp - r_close
-            actual_rr = 2.0
-            # ----------------------------------------------
-            
-            # Entry Validation Rule: Did the reversal candle also break the high of the breakout candle?
-            is_validated = r_close > b_high or r_high > b_high
-            confluence_level = "TBS VALIDATED" if is_validated else "TBS"
-            
-            # Dinamic Diamond Score
-            diamond_score = "A++" if (is_high_prob_consolidation and high_volume_breakout) else "A"
-            if not is_high_prob_consolidation and not high_volume_breakout:
-                diamond_score = "B" # Setup base
+                # Stop Loss: Massimo assoluto + 0.5 ATR (Stanza per respirare)
+                sl = c_high + (atr_val * 0.5)
                 
-            # Calcola quanto è grande il corpo rispetto al range totale
-            body_size = abs(r_close - r_open)
-            total_range = r_high - r_low
-            body_ratio = body_size / total_range if total_range > 0 else 0
-            if body_ratio > 0.6:
-                diamond_score = "A+++"
+                entry = crt_50_level
+                risk = sl - entry
+                if risk <= 0: return None
+                
+                # Target: Strutturale (es. minimo delle ultime 20 candele) o Fisso 1:3
+                lookback_low = df['Low'].iloc[-20:-1].min()
+                tp = min(lookback_low, entry - (risk * 3.0)) 
+                
+                actual_rr = (entry - tp) / risk
+                if actual_rr < 2.0: return None
 
-            return {
-                "symbol": ticker,
-                "timeframe": tf,
-                "type": "bullish_tbs",
-                "subtype": "tbs_setup",
-                "range_high": pivot_high,
-                "range_low": pivot_low,
-                "price": r_close,
-                "entry_price": r_close,
-                "result": None,
-                "is_active": True,
-                "stop_loss": round(sl, 2),
-                "take_profit": round(tp, 2),
-                "rr_ratio": round(actual_rr, 1),
-                "liquidity_tier": "Daily",
-                "session_tag": "TBS Pattern",
-                "has_divergence": False,
-                "seasonality_score": 0,
-                "diamond_score": diamond_score,
-                "confluence_level": confluence_level,
-                "fvg_detected": False,
-                "hitting_fvg": False,
-                "smt_divergence": False,
-                "adr_percent": 0,
-                "rel_volume": int(breakout_candle['Volume'] / avg_vol_20 * 100) if avg_vol_20 > 0 else 0,
-                "volatility_warning": False,
-                "is_golden_wick": False,
-                "touches": int(touches_low),
-                "market_bias": None,
-                "max_favorable_excursion": 0.0
-            }
+                return create_smc_signal(ticker, tf, "bearish_tbs", f"Orderpairing 50% on {swept_level} Purged", c_high, c_low, entry, sl, tp)
+
+        # --- SETUP LONG (Bullish TurtleSoup / OLP) ---
+        # Condizione: La candela deve chiudere verde (c_close > c_open)
+        elif c_close > c_open:
+            swept_level = None
+            
+            # Cerca se ha purgato un OLD LOW (OLP)
+            for p_name, p_val in htf_pools.items():
+                if p_val is None: continue
+                if "L" in p_name: # PDL, PWL, PML
+                    # Regola OLP: Il minimo ha rotto il livello, ma il corpo ha chiuso SOPRA
+                    if c_low < p_val and c_close > p_val:
+                        swept_level = p_name
+                        break
+            
+            if swept_level:
+                # Entrata al 50% della CRT Candle
+                crt_50_level = c_low + (c_range * 0.5)
+                
+                # Stop Loss: Minimo assoluto - 0.5 ATR
+                sl = c_low - (atr_val * 0.5)
+                
+                entry = crt_50_level
+                risk = entry - sl
+                if risk <= 0: return None
+                
+                # Target: Massimo delle ultime 20 candele
+                lookback_high = df['High'].iloc[-20:-1].max()
+                tp = max(lookback_high, entry + (risk * 3.0))
+                
+                actual_rr = (tp - entry) / risk
+                if actual_rr < 2.0: return None
+
+                return create_smc_signal(ticker, tf, "bullish_tbs", f"Orderpairing 50% on {swept_level} Purged", c_high, c_low, entry, sl, tp)
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Errore detect_tbs_setup per {ticker}: {e}")
+        logger.error(f"Errore SMC Orderpairing per {ticker}: {e}")
 
     return None
 
-def detect_crt_models(ticker, df, tf, config=None, htf_pools=None):
-    """
-    Rileva i 4 modelli classici CRT (Candle Range Theory) come da manuale.
-    Cerca una 'Mother Bar' direzionale seguita da una rottura del suo High/Low.
-    """
-    # Permettiamo allo scanner di analizzare sia il Daily che l'Orario
-    if tf not in ['1D', '1H']: return None
-    df = clean_df(df)
-    if df is None or len(df) < 15: return None
-    
-    # Check if we have pools for the HTF filter
-    if not htf_pools:
-        htf_pools = get_htf_liquidity_pools(ticker)
-
-    try:
-        # La candela che fa scattare l'alert è l'ultima (quella appena chiusa)
-        trigger = df.iloc[-1]
-        t_open, t_close, t_high, t_low = to_f(trigger['Open']), to_f(trigger['Close']), to_f(trigger['High']), to_f(trigger['Low'])
-
-        # Calcoliamo la dimensione media del corpo per assicurarci che la Mother Bar sia una "vera" candela forte
-        avg_body = df['Close'].diff().abs().rolling(14).mean().iloc[-2]
-
-        # Cerchiamo la Mother Bar nelle ultime 6 candele
-        for i in range(2, 7): 
-            mb = df.iloc[-i]
-            mb_open, mb_close, mb_high, mb_low = to_f(mb['Open']), to_f(mb['Close']), to_f(mb['High']), to_f(mb['Low'])
-            mb_body = abs(mb_close - mb_open)
-
-            # Filtro: La Mother bar deve essere abbastanza grande (non una doji)
-            if mb_body < (avg_body * 0.7):
-                continue
-
-            intermediate_candles = df.iloc[-i+1:-1]
-            num_candles = i  # Numero totale di candele nel pattern (MB + Intermedie + Trigger)
-
-            # --- SETUP LONG (Bullish CRT) ---
-            # La Mother Bar è ribassista (Nera nell'immagine), e noi rompiamo il suo High
-            if mb_close < mb_open: 
-                crt_high = mb_high
-                crt_low = mb_low
-
-                # Condizione di innesco: La candela attuale chiude in modo deciso sopra il CRT High
-                if t_close > crt_high:
-                    valid = True
-                    has_inside_bar = False
-
-                    # Analizziamo le candele in mezzo
-                    for _, row in intermediate_candles.iterrows():
-                        # Se una candela intermedia CHIUDE sotto il CRT Low, il pattern è invalidato
-                        if to_f(row['Close']) < crt_low:
-                            valid = False
-                            break
-                        # Check se c'è un Inside Bar
-                        if to_f(row['High']) <= mb_high and to_f(row['Low']) >= mb_low:
-                            has_inside_bar = True
-
-                    if valid:
-                        # Classifichiamo i 4 Modelli esatti dall'immagine
-                        model_name = "Multiple Candle CRT"
-                        if num_candles == 2: model_name = "2 Candle CRT"
-                        elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
-                        elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
-
-                        # Calculate Dynamic Buffer using ATR
-                        atr = calculate_atr(df)
-                        buffer = atr * 0.5 if atr > 0 else (t_close * 0.003)
-
-                        # Stop Loss calcolato sul punto più basso dell'intera formazione strutturale
-                        sl = min([crt_low, t_low] + [to_f(r['Low']) for _, r in intermediate_candles.iterrows()]) - buffer
-                        risk = t_close - sl
-                        
-                        # NUOVO CODICE (Intraday Risk Sizing)
-                        if risk < t_close * 0.015:
-                            risk = t_close * 0.015
-                            sl = t_close - risk
-
-                        # --- TARGET MECCANICO (R/R Fisso 1:2) ---
-                        tp = t_close + (risk * 2.0)
-                        reward = tp - t_close
-                        actual_rr = 2.0
-                        # ----------------------------------------------
-
-                        # --- FILTRO LIQUIDITÀ HTF (Il valore aggiunto) ---
-                        sweep_level = None
-                        if htf_pools:
-                            # Controlliamo se la Mother Bar o la candela precedente hanno "sweeppato" un livello HTF
-                            for p_name, p_val in htf_pools.items():
-                                if p_val is None: continue
-                                # Bullish Setup: Cerchiamo sweep sotto PDL, PWL, PML
-                                if "L" in p_name:
-                                    # Se una delle ultime 3 candele è andata sotto il livello
-                                    lookback_window = df.iloc[-num_candles-2:-1]
-                                    if lookback_window['Low'].min() < p_val and mb_close > p_val:
-                                        sweep_level = p_name
-                                        break
-                        
-                        signal_data = create_signal_dict(ticker, tf, "bullish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
-                        
-                        if sweep_level:
-                            signal_data['subtype'] = f"TBS su {sweep_level} + CRT Confirmation"
-                            signal_data['diamond_score'] = "A++ (Diamond Edge)"
-                            signal_data['confluence_level'] = f"Liquidity Sweep confirmed on {sweep_level}"
-                        else:
-                            # Se non c'è sweep, abbassiamo il grado per incoraggiare lo sniper mode
-                            signal_data['diamond_score'] = "B" 
-
-                        signal_data['rr_ratio'] = round(actual_rr, 1)
-                        signal_data['trigger_candles'] = json.dumps([
-                            int(df.index[-i].timestamp()), # Mother Bar
-                            int(df.index[-1].timestamp())  # Trigger Candle
-                        ])
-                        return signal_data
-
-            # --- SETUP SHORT (Bearish CRT) ---
-            # La Mother Bar è rialzista, e noi rompiamo il suo Low
-            elif mb_close > mb_open:
-                crt_high = mb_high
-                crt_low = mb_low
-
-                if t_close < crt_low:
-                    valid = True
-                    has_inside_bar = False
-
-                    for _, row in intermediate_candles.iterrows():
-                        if to_f(row['Close']) > crt_high:
-                            valid = False
-                            break
-                        if to_f(row['High']) <= mb_high and to_f(row['Low']) >= mb_low:
-                            has_inside_bar = True
-
-                    if valid:
-                        model_name = "Multiple Candle CRT"
-                        if num_candles == 2: model_name = "2 Candle CRT"
-                        elif num_candles == 3: model_name = "Inside Bar CRT" if has_inside_bar else "Classic 3 Candle CRT"
-                        elif has_inside_bar: model_name = "Inside Bar CRT (Extended)"
-
-                        # Calculate Dynamic Buffer using ATR
-                        atr = calculate_atr(df)
-                        buffer = atr * 0.5 if atr > 0 else (t_close * 0.003)
-
-                        sl = max([crt_high, t_high] + [to_f(r['High']) for _, r in intermediate_candles.iterrows()]) + buffer
-                        risk = sl - t_close
-                        
-                        # NUOVO CODICE (Intraday Risk Sizing)
-                        if risk < t_close * 0.015:
-                            risk = t_close * 0.015
-                            sl = t_close + risk
-
-                        # --- TARGET MECCANICO (R/R Fisso 1:2) ---
-                        tp = t_close - (risk * 2.0)
-                        reward = t_close - tp
-                        actual_rr = 2.0
-                        # ----------------------------------------------
-
-                        # --- FILTRO LIQUIDITÀ HTF (Bearish) ---
-                        sweep_level = None
-                        if htf_pools:
-                            for p_name, p_val in htf_pools.items():
-                                if p_val is None: continue
-                                # Bearish Setup: Cerchiamo sweep sopra PDH, PWH, PMH
-                                if "H" in p_name:
-                                    lookback_window = df.iloc[-num_candles-2:-1]
-                                    if lookback_window['High'].max() > p_val and mb_close < p_val:
-                                        sweep_level = p_name
-                                        break
-
-                        signal_data = create_signal_dict(ticker, tf, "bearish_crt", model_name, crt_high, crt_low, t_close, sl, tp, num_candles)
-                        
-                        if sweep_level:
-                            signal_data['subtype'] = f"TBS su {sweep_level} + CRT Confirmation"
-                            signal_data['diamond_score'] = "A++ (Diamond Edge)"
-                            signal_data['confluence_level'] = f"Liquidity Sweep confirmed on {sweep_level}"
-                        else:
-                            signal_data['diamond_score'] = "B"
-
-                        signal_data['rr_ratio'] = round(actual_rr, 1)
-                        signal_data['trigger_candles'] = json.dumps([
-                            int(df.index[-i].timestamp()), # Mother Bar
-                            int(df.index[-1].timestamp())  # Trigger Candle
-                        ])
-                        return signal_data
-
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Errore detect_crt_models per {ticker}: {e}")
-
-    return None
-
+def create_smc_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp):
+    """Helper pulito per generare il dizionario del segnale Limit (Pending)"""
+    return {
+        "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
+        "range_high": round(high, 2), "range_low": round(low, 2), 
+        "price": round(entry, 2), # Questo è il prezzo TRIGGER attuale per Supabase
+        "entry_price": round(entry, 2),
+        "result": None, "is_active": True, 
+        "status": "pending", # FONDAMENTALE: L'ordine è pendente, aspetta il ritracciamento!
+        "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
+        "rr_ratio": round(abs(entry-tp)/abs(entry-sl), 1), 
+        "liquidity_tier": "HTF Sweep", "session_tag": "SMC Limit Order",
+        "diamond_score": "A++", "confluence_level": "Orderpairing 50%",
+        "has_divergence": False, "seasonality_score": 0, "seasonality_data": "{}", 
+        "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
+        "rel_volume": 0, "volatility_warning": False, "is_golden_wick": True, "touches": 1,
+        "market_bias": None, "max_favorable_excursion": 0.0, "trigger_candles": None
+    }
 
 def detect_golden_wick(ticker, df, tf, config=None):
     """
@@ -1622,7 +1266,6 @@ def main():
     setup_supabase()
     
     # Fix console encoding on Windows for Emojis
-    import sys
     if sys.platform.startswith('win'):
         try:
             sys.stdout.reconfigure(encoding='utf-8')
@@ -1738,7 +1381,6 @@ def main():
     
     # --- FILTRO MARKET CAP (< 10B) ---
     logger.info("Filtro Market Cap in corso... (Minimo 10B)")
-    import concurrent.futures
     
     def check_mcap(t):
         try:
@@ -1878,57 +1520,14 @@ def main():
                         sig['trend_alignment'] = 'Neutral'
                     return sig
 
-                # B. Detection nuovi segnali
-                signal = detect_macro_sweep(ticker, df, tf, scanner_config)
-                if signal:
-                    signal['session_tag'] = f"Sweep - Bias {market_bias}"
-                    signal['market_bias'] = market_bias
-                    signal = apply_trend_alignment(signal, market_bias)
+                # --- NUOVO CODICE SMC ---
+                smc_signal = detect_smc_orderpairing(ticker, df, tf, scanner_config, htf_pools)
+                if smc_signal:
+                    smc_signal['market_bias'] = market_bias
+                    smc_signal = apply_trend_alignment(smc_signal, market_bias)
                     
-                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
-                    # Prendiamo SOLO i segnali con confluenza macro A++ 
-                    if signal.get('diamond_score') != 'A++':
-                        continue
-                        
-                    all_detected_signals.append(signal)
-                    logger.info(f"💎 {ticker} [{tf}]: {signal['liquidity_tier']} Sweep - Score A++")
-
-                # C. Detection TBS Pattern
-                tbs_signal = detect_tbs_setup(ticker, df, tf, scanner_config, htf_pools)
-                if tbs_signal:
-                    # VOLUME BYPASS: Se l'asset non ha volumi affidabili, ignoriamo il filtro rvol
-                    rel_vol = tbs_signal.get('rel_volume', 0)
-                    rvol_threshold = float(scanner_config.get("rvol_threshold", 1.5))
-                    
-                    if has_reliable_volume(ticker):
-                        # Per gli Stock il volume deve essere alto
-                        if rel_vol < rvol_threshold:
-                            tbs_signal = None
-                    
-                if tbs_signal:
-                    tbs_signal['session_tag'] = f"TBS - Bias {market_bias}"
-                    tbs_signal['market_bias'] = market_bias
-                    tbs_signal = apply_trend_alignment(tbs_signal, market_bias)
-                    
-                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
-                    if tbs_signal.get('diamond_score') != 'A++':
-                        continue
-
-                    all_detected_signals.append(tbs_signal)
-                    logger.info(f"🐢 {ticker} [{tf}]: TBS Pattern - Score A++")
-
-                # D. Detection 4 Models CRT
-                crt_signal = detect_crt_models(ticker, df, tf, scanner_config, htf_pools)
-                if crt_signal:
-                    crt_signal['market_bias'] = market_bias
-                    crt_signal = apply_trend_alignment(crt_signal, market_bias)
-                    
-                    # --- FILTRO QUALITÀ (SNIPER MODE) ---
-                    if crt_signal.get('diamond_score') != 'A++':
-                        continue
-
-                    all_detected_signals.append(crt_signal)
-                    logger.info(f"🕯️ {ticker} [{tf}]: {crt_signal['subtype']} - Score A++")
+                    all_detected_signals.append(smc_signal)
+                    logger.info(f"💎 {ticker} [{tf}]: {smc_signal['subtype']} - LIMIT @ {smc_signal['entry_price']}")
 
                 # E. Detection Golden Wick
                 gw_signal = detect_golden_wick(ticker, df, tf, scanner_config)
