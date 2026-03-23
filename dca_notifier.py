@@ -117,25 +117,28 @@ def monitor_plans():
     symbols = list(set([p['symbol'] for p in plans]))
     prices = {}
     if symbols:
-        try:
-            # Bulk download current prices (previous day data for better close coverage)
-            logger.info(f"Downloading prices for: {symbols}")
-            data = yf.download(symbols, period="2d", interval="1d", group_by="ticker", progress=False)
-            
-            for s in symbols:
-                try:
-                    # Extract last Close price, ensuring no NaNs
-                    ticker_data = data[s] if len(symbols) > 1 else data
-                    close_prices = ticker_data['Close'].dropna()
-                    
-                    if not close_prices.empty:
-                        prices[s] = float(close_prices.iloc[-1])
-                    else:
-                        logger.warning(f"No valid Close price found for {s}")
-                except Exception as e:
-                    logger.error(f"Error extracting price for {s}: {e}")
-        except Exception as e:
-            logger.error(f"Error in bulk download: {e}")
+        import concurrent.futures
+        logger.info(f"Downloading real-time prices for {len(symbols)} tickers...")
+        
+        def fetch_price(symbol):
+            try:
+                ticker = yf.Ticker(symbol)
+                # fast_info is extremely fast and robust for current/last price
+                price = ticker.fast_info.get('lastPrice')
+                if price is not None:
+                    return symbol, float(price)
+            except Exception as e:
+                logger.error(f"Error fetching live price for {symbol}: {e}")
+            return symbol, None
+
+        # Fetch in parallel for speed and reliability
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            results = executor.map(fetch_price, symbols)
+            for sym, price in results:
+                if price is not None:
+                    prices[sym] = price
+                else:
+                    logger.warning(f"No valid price found for {sym}")
 
     for plan in plans:
         symbol = plan['symbol']
