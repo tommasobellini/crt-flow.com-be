@@ -6,6 +6,8 @@ import requests
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from notifications import send_telegram_alert # Reuse existing infra
+from pywebpush import webpush, WebPushException
+import json
 
 # 1. SETUP LOGGING
 logger = logging.getLogger("DcaNotifier")
@@ -104,6 +106,55 @@ def send_dca_notification(symbol, level, price, amount):
         except Exception as e:
             logger.error(f"Failed to send Telegram: {e}")
 
+def send_push_notification(user_id, symbol, title, message):
+    """Invia notifiche Push Browser agli endpoint registrati."""
+    vapid_private = os.getenv("VAPID_PRIVATE_KEY")
+    vapid_claims = {"sub": "mailto:admin@crt-flow.com"}
+
+    if not vapid_private:
+        return
+
+    try:
+        # Recupera le sottoscrizioni dell'utente
+        response = supabase.table("user_push_subscriptions").select("*").eq("user_id", user_id).execute()
+        subscriptions = response.data
+        
+        if not subscriptions:
+            return
+
+        payload = json.dumps({
+            "title": title,
+            "body": message,
+            "icon": "/logo.png",
+            "url": f"/dashboard/smart-dca?symbol={symbol}"
+        })
+
+        for sub in subscriptions:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub["endpoint"],
+                        "keys": {
+                            "p256dh": sub["p256dh"],
+                            "auth": sub["auth"]
+                        }
+                    },
+                    data=payload,
+                    vapid_private_key=vapid_private,
+                    vapid_claims=vapid_claims
+                )
+                logger.info(f"✅ Web Push sent to endpoint {sub['id']}")
+            except WebPushException as ex:
+                logger.error(f"❌ WebPushException: {ex}")
+                # Se l'endpoint è scaduto (410 Gone), lo rimuoviamo
+                if ex.response and ex.response.status_code == 410:
+                    supabase.table("user_push_subscriptions").delete().eq("id", sub["id"]).execute()
+            except Exception as ex:
+                logger.error(f"❌ Errore Web Push: {ex}")
+
+    except Exception as e:
+        logger.error(f"❌ Errore generale Web Push: {e}")
+
 def monitor_plans():
     """Fetches active plans, checks prices, and sends notifications once."""
     logger.info("Starting one-shot DCA Monitor...")
@@ -169,6 +220,24 @@ def monitor_plans():
                 
                 # Send notification
                 send_dca_notification(symbol, level_num, trigger_price, allocate_amount)
+                
+                # Insert into user_notifications for the webapp
+                try:
+                    supabase.table("user_notifications").insert({
+                        "user_id": plan['user_id'],
+                        "type": "dca_hit",
+                        "symbol": symbol,
+                        "title": f"DCA Level {level_num} Hit: {symbol}",
+                        "message": f"The price dropped to {current_price:.2f}, reaching your Tranche n° {level_num}.",
+                        "price": current_price,
+                        "status": "unread"
+                    }).execute()
+                    logger.info(f"Webapp notification saved for {symbol}")
+                except Exception as ne:
+                    logger.error(f"Failed to save webapp notification: {ne}")
+                
+                # 3. Web Push (Mobile/Browser)
+                send_push_notification(plan['user_id'], symbol, f"DCA Level {level_num} Hit: {symbol}", f"The price dropped to {current_price:.2f}, reaching your Tranche n° {level_num}.")
 
         if updated:
             update_plan_levels(plan['id'], levels)
