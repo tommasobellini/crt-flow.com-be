@@ -152,8 +152,8 @@ def monitor_plans():
             # FIX 1: Correct JSONB field names
             # FIX 2: Skip Level 1 (Starter Position)
             level_num = level.get('level', 1)
-            trigger_price = level.get('trigger_price', 0)
-            allocate_amount = level.get('allocate_amount', 0)
+            trigger_price = level.get('price', 0)
+            allocate_amount = level.get('amount', 0)
 
             if level_num == 1:
                 continue
