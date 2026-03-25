@@ -146,47 +146,57 @@ LIQUIDITY_CACHE = {}
 
 def prefetch_all_htf_liquidity(tickers):
     global LIQUIDITY_CACHE
-    logger.info(f"🌊 Pre-fetching dati Daily (3mo) in bulk per {len(tickers)} ticker...")
+    logger.info(f"🌊 Analisi HTF Walls (D/W/M) per {len(tickers)} ticker...")
 
     try:
-        data = yf.download(tickers, period="3mo", interval="1d", group_by='ticker', progress=False, threads=True)
+        data = yf.download(tickers, period="12mo", interval="1d", group_by='ticker', progress=False, threads=True)
         if data.empty: return
 
         for ticker in tickers:
             try:
                 df = data[ticker] if len(tickers) > 1 else data
                 df = clean_df(df.dropna())
-                if df.empty or len(df) < 15: continue
+                if df.empty or len(df) < 30: continue
 
-                pdh = to_f(df['High'].iloc[-2])
-                pdl = to_f(df['Low'].iloc[-2])
-                prev_day_range = pdh - pdl
-                
-                try:
-                    weekly = df.resample('W').agg({'High': 'max', 'Low': 'min'}).dropna()
-                    pwh = to_f(weekly['High'].iloc[-2]) if len(weekly) >= 2 else pdh
-                    pwl = to_f(weekly['Low'].iloc[-2]) if len(weekly) >= 2 else pdl
-                except Exception:
-                    pwh, pwl = pdh, pdl
+                # --- LIVELLI DAILY ---
+                d_prev = df.iloc[-2]
+                pdh, pdl = to_f(d_prev['High']), to_f(d_prev['Low'])
+                # No-Wick Check Daily
+                d_body = abs(to_f(d_prev['Close']) - to_f(d_prev['Open']))
+                if d_body == 0: d_body = 0.001
+                pdh_wall = (to_f(d_prev['High']) - max(to_f(d_prev['Open']), to_f(d_prev['Close']))) < (d_body * 0.01)
+                pdl_wall = (min(to_f(d_prev['Open']), to_f(d_prev['Close'])) - to_f(d_prev['Low'])) < (d_body * 0.01)
 
-                try:
-                    monthly = df.resample('ME').agg({'High': 'max', 'Low': 'min'}).dropna()
-                    pmh = to_f(monthly['High'].iloc[-2]) if len(monthly) >= 2 else pdh
-                    pml = to_f(monthly['Low'].iloc[-2]) if len(monthly) >= 2 else pdl
-                except Exception:
-                    pmh, pml = pdh, pdl
+                # --- LIVELLI WEEKLY ---
+                weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
+                w_prev = weekly.iloc[-2] if len(weekly) >= 2 else weekly.iloc[-1]
+                pwh, pwl = to_f(w_prev['High']), to_f(w_prev['Low'])
+                w_body = abs(to_f(w_prev['Close']) - to_f(w_prev['Open']))
+                if w_body == 0: w_body = 0.001
+                pwh_wall = (to_f(w_prev['High']) - max(to_f(w_prev['Open']), to_f(w_prev['Close']))) < (w_body * 0.01)
+                pwl_wall = (min(to_f(w_prev['Open']), to_f(w_prev['Close'])) - to_f(w_prev['Low'])) < (w_body * 0.01)
 
+                # --- LIVELLI MONTHLY ---
+                monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
+                m_prev = monthly.iloc[-2] if len(monthly) >= 2 else monthly.iloc[-1]
+                pmh, pml = to_f(m_prev['High']), to_f(m_prev['Low'])
+                m_body = abs(to_f(m_prev['Close']) - to_f(m_prev['Open']))
+                if m_body == 0: m_body = 0.001
+                pmh_wall = (to_f(m_prev['High']) - max(to_f(m_prev['Open']), to_f(m_prev['Close']))) < (m_body * 0.01)
+                pml_wall = (min(to_f(m_prev['Open']), to_f(m_prev['Close'])) - to_f(m_prev['Low'])) < (m_body * 0.01)
+
+                # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
                 adr_10 = (last_10_days['High'] - last_10_days['Low']).mean()
 
                 LIQUIDITY_CACHE[ticker] = {
-                    "PDH": pdh, "PDL": pdl, "PDR": prev_day_range,
-                    "PWH": pwh, "PWL": pwl,
-                    "PMH": pmh, "PML": pml,
-                    "ADR_10": adr_10
+                    "PDH": pdh, "PDL": pdl, "PDH_WALL": pdh_wall, "PDL_WALL": pdl_wall,
+                    "PWH": pwh, "PWL": pwl, "PWH_WALL": pwh_wall, "PWL_WALL": pwl_wall,
+                    "PMH": pmh, "PML": pml, "PMH_WALL": pmh_wall, "PML_WALL": pml_wall,
+                    "ADR_10": adr_10, "PDR": pdh - pdl
                 }
-            except Exception: pass
-        logger.info(f"✅ HTF Pools e ADR calcolati per {len(LIQUIDITY_CACHE)} ticker.")
+            except Exception: continue
+        logger.info(f"✅ HTF Walls e ADR calcolati per {len(LIQUIDITY_CACHE)} ticker.")
     except Exception as e:
         logger.error(f"Errore prefetch HTF: {e}")
 
@@ -313,54 +323,69 @@ def detect_crt_model_1(ticker, df, tf, htf_pools):
     pools = htf_pools.get(ticker)
     if not pools: return None
 
-    pdh, pdl, pdr, adr = pools.get("PDH"), pools.get("PDL"), pools.get("PDR"), pools.get("ADR_10")
-    pwh, pwl, pmh, pml = pools.get("PWH"), pools.get("PWL"), pools.get("PMH"), pools.get("PML")
-
-    if not all([pdh, pdl, pdr, adr, pmh, pml, pwh, pwl]): return None
-    if pdr < (adr * 0.90): return None
-
-    c = df.iloc[-2]
+    # Estrazione pool e flag No-Wick
+    pdh, pdl = pools["PDH"], pools["PDL"]
+    pwh, pwl = pools["PWH"], pools["PWL"]
+    pmh, pml = pools["PMH"], pools["PML"]
+    
+    c = df.iloc[-2] # Candela di Sweep 1H
+    prev_candle = df.iloc[-3] # Candela precedente 1H
+    
     c_open, c_close = to_f(c['Open']), to_f(c['Close'])
     c_high, c_low = to_f(c['High']), to_f(c['Low'])
     c_range = c_high - c_low
     if c_range == 0: return None
 
+    pc_open, pc_close = to_f(prev_candle['Open']), to_f(prev_candle['Close'])
+    pc_high, pc_low = to_f(prev_candle['High']), to_f(prev_candle['Low'])
+    pc_body = abs(pc_close - pc_open)
+
     context_window = df.iloc[-52:-2]
-    if context_window.empty: return None
-    recent_min = to_f(context_window['Low'].min())
-    recent_max = to_f(context_window['High'].max())
+    recent_min, recent_max = to_f(context_window['Low'].min()), to_f(context_window['High'].max())
 
-    # Bearish
+    # --- LOGICA BEARISH (Sweep del Massimo) ---
     if recent_max <= c_high:
-        level_val, swept_level, diamond_score, tp = None, None, None, None
-        if c_high > pmh and c_close < pmh:
-            level_val, swept_level, diamond_score, tp = pmh, 'PMH', 'A+++', pml
-        elif c_high > pwh and c_close < pwh:
-            level_val, swept_level, diamond_score, tp = pwh, 'PWH', 'A++', pwl
-        elif c_high > pdh and c_close < pdh:
-            level_val, swept_level, diamond_score, tp = pdh, 'PDH', 'A+', pdl
-        
-        if level_val and c_close < c_open and c_close <= (c_low + c_range * 0.5):
-            entry = c_close
-            sl = c_high + (c_close * 0.001)
-            if sl > entry and entry > tp:
-                return create_pure_crt_signal(ticker, tf, "bearish_tbs", "Bearish Model #1", c_high, c_low, entry, sl, tp, diamond_score, swept_level)
+        setup = None
+        # Priorità Mensile -> Settimanale -> Giornaliero
+        if c_high > pmh and c_close < pmh and pools.get("PMH_WALL"):
+            setup = ("bearish_tbs", "Monthly No-Wick Sweep", "A+++", pmh, pml, "PMH")
+        elif c_high > pwh and c_close < pwh and pools.get("PWH_WALL"):
+            setup = ("bearish_tbs", "Weekly No-Wick Sweep", "A++", pwh, pwl, "PWH")
+        elif c_high > pdh and c_close < pdh and pools.get("PDH_WALL"):
+            setup = ("bearish_tbs", "Daily No-Wick Sweep", "A+", pdh, pdl, "PDH")
 
-    # Bullish
+        if setup:
+            # INTEGRATE 1H Mini Wick Rule for Short
+            if pc_close <= pc_open: setup = None # Must be Green
+            elif pc_body == 0: setup = None
+            elif (pc_high - pc_close) > (pc_body * 0.01): setup = None # Small upper wick
+
+        if setup and c_close < c_open and c_close <= (c_low + c_range * 0.5):
+            s_type, s_sub, d_score, lv, target, tier = setup
+            entry, sl = c_close, c_high + (c_close * 0.001)
+            return create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, target, d_score, tier)
+
+    # --- LOGICA BULLISH (Sweep del Minimo) ---
     if recent_min >= c_low:
-        level_val, swept_level, diamond_score, tp = None, None, None, None
-        if c_low < pml and c_close > pml:
-            level_val, swept_level, diamond_score, tp = pml, 'PML', 'A+++', pmh
-        elif c_low < pwl and c_close > pwl:
-            level_val, swept_level, diamond_score, tp = pwl, 'PWL', 'A++', pwh
-        elif c_low < pdl and c_close > pdl:
-            level_val, swept_level, diamond_score, tp = pdl, 'PDL', 'A+', pdh
-            
-        if level_val and c_close > c_open and c_close >= (c_high - c_range * 0.5):
-            entry = c_close
-            sl = c_low - (c_close * 0.001)
-            if sl < entry and entry < tp:
-                return create_pure_crt_signal(ticker, tf, "bullish_tbs", "Bullish Model #1", c_high, c_low, entry, sl, tp, diamond_score, swept_level)
+        setup = None
+        if c_low < pml and c_close > pml and pools.get("PML_WALL"):
+            setup = ("bullish_tbs", "Monthly No-Wick Sweep", "A+++", pml, pmh, "PML")
+        elif c_low < pwl and c_close > pwl and pools.get("PWL_WALL"):
+            setup = ("bullish_tbs", "Weekly No-Wick Sweep", "A++", pwl, pwh, "PWL")
+        elif c_low < pdl and c_close > pdl and pools.get("PDL_WALL"):
+            setup = ("bullish_tbs", "Daily No-Wick Sweep", "A+", pdl, pdh, "PDL")
+
+        if setup:
+            # INTEGRATE 1H Mini Wick Rule for Long
+            if pc_close >= pc_open: setup = None # Must be Red
+            elif pc_body == 0: setup = None
+            elif (pc_close - pc_low) > (pc_body * 0.01): setup = None # Small lower wick
+
+        if setup and c_close > c_open and c_close >= (c_high - c_range * 0.5):
+            s_type, s_sub, d_score, lv, target, tier = setup
+            entry, sl = c_close, c_low - (c_close * 0.001)
+            return create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, target, d_score, tier)
+
     return None
 
 def main():
