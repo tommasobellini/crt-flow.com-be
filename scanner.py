@@ -164,8 +164,8 @@ def prefetch_all_htf_liquidity(tickers):
                 # No-Wick Check Daily
                 d_body = abs(to_f(d_prev['Close']) - to_f(d_prev['Open']))
                 if d_body == 0: d_body = 0.001
-                pdh_wall = (to_f(d_prev['High']) - max(to_f(d_prev['Open']), to_f(d_prev['Close']))) < (d_body * 0.01)
-                pdl_wall = (min(to_f(d_prev['Open']), to_f(d_prev['Close'])) - to_f(d_prev['Low'])) < (d_body * 0.01)
+                pdh_wall = (to_f(d_prev['High']) - max(to_f(d_prev['Open']), to_f(d_prev['Close']))) < (d_body * 0.03)
+                pdl_wall = (min(to_f(d_prev['Open']), to_f(d_prev['Close'])) - to_f(d_prev['Low'])) < (d_body * 0.03)
 
                 # --- LIVELLI WEEKLY ---
                 weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -173,8 +173,8 @@ def prefetch_all_htf_liquidity(tickers):
                 pwh, pwl = to_f(w_prev['High']), to_f(w_prev['Low'])
                 w_body = abs(to_f(w_prev['Close']) - to_f(w_prev['Open']))
                 if w_body == 0: w_body = 0.001
-                pwh_wall = (to_f(w_prev['High']) - max(to_f(w_prev['Open']), to_f(w_prev['Close']))) < (w_body * 0.01)
-                pwl_wall = (min(to_f(w_prev['Open']), to_f(w_prev['Close'])) - to_f(w_prev['Low'])) < (w_body * 0.01)
+                pwh_wall = (to_f(w_prev['High']) - max(to_f(w_prev['Open']), to_f(w_prev['Close']))) < (w_body * 0.03)
+                pwl_wall = (min(to_f(w_prev['Open']), to_f(w_prev['Close'])) - to_f(w_prev['Low'])) < (w_body * 0.03)
 
                 # --- LIVELLI MONTHLY ---
                 monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -182,8 +182,8 @@ def prefetch_all_htf_liquidity(tickers):
                 pmh, pml = to_f(m_prev['High']), to_f(m_prev['Low'])
                 m_body = abs(to_f(m_prev['Close']) - to_f(m_prev['Open']))
                 if m_body == 0: m_body = 0.001
-                pmh_wall = (to_f(m_prev['High']) - max(to_f(m_prev['Open']), to_f(m_prev['Close']))) < (m_body * 0.01)
-                pml_wall = (min(to_f(m_prev['Open']), to_f(m_prev['Close'])) - to_f(m_prev['Low'])) < (m_body * 0.01)
+                pmh_wall = (to_f(m_prev['High']) - max(to_f(m_prev['Open']), to_f(m_prev['Close']))) < (m_body * 0.03)
+                pml_wall = (min(to_f(m_prev['Open']), to_f(m_prev['Close'])) - to_f(m_prev['Low'])) < (m_body * 0.03)
 
                 # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
@@ -316,6 +316,15 @@ def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp
         "market_bias": None, "max_favorable_excursion": 0.0, "trigger_candles": None
     }
 
+def create_watchlist_signal(ticker, tf, tier, level_val, dist):
+    return {
+        "symbol": ticker, "timeframe": tf, "type": "watchlist", 
+        "subtype": f"Approaching {tier}", "price": round(level_val, 2),
+        "status": "watchlist", "is_active": True,
+        "liquidity_tier": tier, "diamond_score": "PRE-ALERT",
+        "confluence_level": f"Dist: {round(dist*100, 2)}%"
+    }
+
 def detect_crt_model_1(ticker, df, tf, htf_pools):
     if tf != '1H': return None
     df = clean_df(df)
@@ -358,7 +367,7 @@ def detect_crt_model_1(ticker, df, tf, htf_pools):
             # INTEGRATE 1H Mini Wick Rule for Short
             if pc_close <= pc_open: setup = None # Must be Green
             elif pc_body == 0: setup = None
-            elif (pc_high - pc_close) > (pc_body * 0.01): setup = None # Small upper wick
+            elif (pc_high - pc_close) > (pc_body * 0.03): setup = None # Small upper wick
 
         if setup and c_close < c_open and c_close <= (c_low + c_range * 0.5):
             s_type, s_sub, d_score, lv, target, tier = setup
@@ -379,12 +388,35 @@ def detect_crt_model_1(ticker, df, tf, htf_pools):
             # INTEGRATE 1H Mini Wick Rule for Long
             if pc_close >= pc_open: setup = None # Must be Red
             elif pc_body == 0: setup = None
-            elif (pc_close - pc_low) > (pc_body * 0.01): setup = None # Small lower wick
+            elif (pc_close - pc_low) > (pc_body * 0.03): setup = None # Small lower wick
 
         if setup and c_close > c_open and c_close >= (c_high - c_range * 0.5):
             s_type, s_sub, d_score, lv, target, tier = setup
             entry, sl = c_close, c_low - (c_close * 0.001)
             return create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, target, d_score, tier)
+
+    # --- LOGICA WATCHLIST (KILLZONE) ---
+    current_price = to_f(df['Close'].iloc[-1])
+    threshold = 0.005 # 0.5% (Watchlist)
+
+    levels_to_check = [
+        (pmh, "Monthly Wall (High)", "PMH"), (pml, "Monthly Wall (Low)", "PML"),
+        (pwh, "Weekly Wall (High)", "PWH"), (pwl, "Weekly Wall (Low)", "PWL"),
+        (pdh, "Daily Wall (High)", "PDH"), (pdl, "Daily Wall (Low)", "PDL")
+    ]
+
+    for lv_val, lv_name, code in levels_to_check:
+        dist = abs(current_price - lv_val) / lv_val
+        if dist <= threshold:
+            try:
+                # Check for existing watchlist signal
+                existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "watchlist").execute()
+                if not existing.data:
+                    watchlist_sig = create_watchlist_signal(ticker, tf, code, lv_val, dist)
+                    supabase.table("crt_signals").insert(watchlist_sig).execute()
+                    logger.info(f"👀 {ticker} aggiunto alla WATCHLIST ({code})")
+            except Exception as e:
+                logger.error(f"Errore watchlist update: {e}")
 
     return None
 
