@@ -45,3 +45,25 @@ Ticker rimanenti post M-Cap: 493
 ✅ HTF Pools e ADR calcolati per 493 ticker.
 === Download Bulk 1H ===
 ✅ Scansione Pure CRT Model #1 Completata!
+🚀 Avvio scanner_new (Pure CRT Model #1)...
+Totale Ticker unici: 526
+Filtro Market Cap in corso... (Minimo 10B)
+Ticker rimanenti post M-Cap: 498
+Caricati 20 segnali attivi per monitoraggio.
+🌊 Pre-fetching dati Daily (3mo) in bulk per 498 ticker (Calcolo HTF Pools e ADR)...
+✅ HTF Pools e ADR calcolati per 497 ticker.
+=== Download Bulk 1H ===
+✅ Segnale CONCLUSO per EME: LOSS (STOPPED)
+✅ Segnale CONCLUSO per ALB: LOSS (STOPPED)
+✅ Segnale CONCLUSO per MPWR: LOSS (STOPPED)
+✅ Segnale CONCLUSO per HAL: LOSS (STOPPED)
+✅ Scansione Pure CRT Model #1 Completata!
+🚀 Avvio scanner_new (Pure CRT Model #1)...
+Totale Ticker unici: 526
+Filtro Market Cap in corso...
+Ticker post M-Cap: 498
+Caricati 16 segnali attivi.
+🌊 Pre-fetching dati Daily (3mo) in bulk per 498 ticker...
+✅ HTF Pools e ADR calcolati per 498 ticker.
+=== Scansione 1H ===
+✅ Completato!

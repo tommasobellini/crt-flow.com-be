@@ -71,7 +71,7 @@ def setup_supabase():
 
 # --- 3. TIMEFRAME E TICKER LISTS ---
 TF_CONFIG = {
-    "1H": {"period": "60d", "interval": "1h"} # Meno dati bastano per l'H1
+    "1H": {"period": "60d", "interval": "1h"}
 }
 
 def get_sp500_tickers():
@@ -146,7 +146,7 @@ LIQUIDITY_CACHE = {}
 
 def prefetch_all_htf_liquidity(tickers):
     global LIQUIDITY_CACHE
-    logger.info(f"🌊 Pre-fetching dati Daily (3mo) in bulk per {len(tickers)} ticker (Calcolo HTF Pools e ADR)...")
+    logger.info(f"🌊 Pre-fetching dati Daily (3mo) in bulk per {len(tickers)} ticker...")
 
     try:
         data = yf.download(tickers, period="3mo", interval="1d", group_by='ticker', progress=False, threads=True)
@@ -156,16 +156,12 @@ def prefetch_all_htf_liquidity(tickers):
             try:
                 df = data[ticker] if len(tickers) > 1 else data
                 df = clean_df(df.dropna())
+                if df.empty or len(df) < 15: continue
 
-                if df.empty or len(df) < 15:
-                    continue
-
-                # Calcolo Daily HTF (Prendiamo la candela daily precedente chiusa: .iloc[-2] se oggi è ancora in corso
                 pdh = to_f(df['High'].iloc[-2])
                 pdl = to_f(df['Low'].iloc[-2])
                 prev_day_range = pdh - pdl
                 
-                # Calcolo Weekly HTF
                 try:
                     weekly = df.resample('W').agg({'High': 'max', 'Low': 'min'}).dropna()
                     pwh = to_f(weekly['High'].iloc[-2]) if len(weekly) >= 2 else pdh
@@ -173,21 +169,13 @@ def prefetch_all_htf_liquidity(tickers):
                 except Exception:
                     pwh, pwl = pdh, pdl
 
-                # Calcolo Monthly HTF
                 try:
                     monthly = df.resample('ME').agg({'High': 'max', 'Low': 'min'}).dropna()
                     pmh = to_f(monthly['High'].iloc[-2]) if len(monthly) >= 2 else pdh
                     pml = to_f(monthly['Low'].iloc[-2]) if len(monthly) >= 2 else pdl
                 except Exception:
-                    try:
-                        monthly = df.resample('M').agg({'High': 'max', 'Low': 'min'}).dropna()
-                        pmh = to_f(monthly['High'].iloc[-2]) if len(monthly) >= 2 else pdh
-                        pml = to_f(monthly['Low'].iloc[-2]) if len(monthly) >= 2 else pdl
-                    except Exception:
-                        pmh, pml = pdh, pdl
+                    pmh, pml = pdh, pdl
 
-                # Calcolo ADR 10 giorni
-                # Prendiamo le 10 candele daily *prima* di quella corrente: da -12 a -2 compresso
                 last_10_days = df.iloc[-12:-2]
                 adr_10 = (last_10_days['High'] - last_10_days['Low']).mean()
 
@@ -197,19 +185,112 @@ def prefetch_all_htf_liquidity(tickers):
                     "PMH": pmh, "PML": pml,
                     "ADR_10": adr_10
                 }
-            except Exception:
-                pass
-
+            except Exception: pass
         logger.info(f"✅ HTF Pools e ADR calcolati per {len(LIQUIDITY_CACHE)} ticker.")
     except Exception as e:
         logger.error(f"Errore prefetch HTF: {e}")
 
-# --- 6. LOGICA PURE CRT MODEL #1 ---
+# --- 6. AGGIORNAMENTO SEGNALI ATTIVI (Monitoring & Autopsy) ---
+def validate_existing_signals(ticker, df, active_signals_map):
+    updates = []
+    if ticker not in active_signals_map: return updates
+
+    signals = active_signals_map[ticker]
+    curr_candle = df.iloc[-1]
+    curr_high = to_f(curr_candle['High'])
+    curr_low = to_f(curr_candle['Low'])
+    curr_close = to_f(curr_candle['Close'])
+    curr_open = to_f(curr_candle['Open'])
+
+    for sig in signals:
+        sl = to_f(sig.get('stop_loss', 0))
+        tp = to_f(sig.get('take_profit', 0))
+        entry = to_f(sig.get('entry_price', sig.get('price')))
+        s_type = sig.get('type', '')
+        status = sig.get('status', 'active')
+        
+        if status == 'pending':
+            triggered, missed = False, False
+            if 'bullish' in s_type:
+                if curr_low <= entry: triggered = True
+                elif curr_high >= tp: missed = True
+            elif 'bearish' in s_type:
+                if curr_high >= entry: triggered = True
+                elif curr_low <= tp: missed = True
+            
+            if triggered:
+                logger.info(f"⚡ {ticker} [{sig['timeframe']}]: Limit Order ESEGUITO @ {entry}")
+                updates.append({"id": sig['id'], "status": 'active'})
+                continue 
+            elif missed:
+                logger.info(f"👻 {ticker} [{sig['timeframe']}]: Ghost Win EVITATA.")
+                updates.append({
+                    "id": sig['id'], "is_active": False, "status": 'missed', "result": 'MISSED',
+                    "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+                })
+                continue
+            else: continue
+
+        should_expire = False
+        reason = ""
+        exit_reason_text = "Standard Exit"
+        new_sl = sl
+
+        if 'bullish' in s_type:
+            # Breakeven Trailing logic
+            if curr_high >= entry + (tp - entry) * 0.5 and sl < entry:
+                new_sl = entry
+                updates.append({"id": sig['id'], "stop_loss": entry})
+            
+            if curr_low <= new_sl:
+                should_expire = True
+                reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
+                if reason == "STOPPED":
+                    if curr_close > new_sl: exit_reason_text = "Stop Hunt (Wicked Out)"
+                    elif curr_high >= entry + (tp - entry) * 0.8: exit_reason_text = "Greed (Missed TP <20%)"
+                    else: exit_reason_text = "Trend Failure"
+                else: exit_reason_text = "Breakeven Secured"
+            elif curr_high >= tp:
+                should_expire = True
+                reason = "PROFIT"
+                if curr_low <= entry - (entry - sl) * 0.8: exit_reason_text = "Struggle Hit (Almost Stopped)"
+                else: exit_reason_text = "Clean Snipe"
+        
+        elif 'bearish' in s_type:
+            # Breakeven Trailing logic
+            if curr_low <= entry - (entry - tp) * 0.5 and sl > entry:
+                new_sl = entry
+                updates.append({"id": sig['id'], "stop_loss": entry})
+            
+            if curr_high >= new_sl:
+                should_expire = True
+                reason = "STOPPED" if new_sl != entry else "BREAKEVEN"
+                if reason == "STOPPED":
+                    if curr_close < new_sl: exit_reason_text = "Stop Hunt (Wicked Out)"
+                    elif curr_low <= entry - (entry - tp) * 0.8: exit_reason_text = "Greed (Missed TP <20%)"
+                    else: exit_reason_text = "Trend Failure"
+                else: exit_reason_text = "Breakeven Secured"
+            elif curr_low <= tp:
+                should_expire = True
+                reason = "PROFIT"
+                if curr_high >= entry + (sl - entry) * 0.8: exit_reason_text = "Struggle Hit (Almost Stopped)"
+                else: exit_reason_text = "Clean Snipe"
+        
+        if should_expire:
+            result_code = 'WIN' if reason == 'PROFIT' else 'LOSS' if reason == 'STOPPED' else 'BREAKEVEN'
+            logger.info(f"✅ Segnale CONCLUSO per {ticker}: {result_code} ({exit_reason_text})")
+            updates.append({
+                "id": sig['id'], "is_active": False, "result": result_code,
+                "exit_reason": exit_reason_text,
+                "closed_at": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+            })
+    return updates
+
+# --- 7. LOGICA PURE CRT MODEL #1 ---
 def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp, diamond_score, swept_level):
     rr_ratio = 0
     if abs(entry - sl) > 0:
         rr_ratio = abs(entry - tp) / abs(entry - sl)
-        
     return {
         "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
         "range_high": round(high, 2), "range_low": round(low, 2),
@@ -229,106 +310,59 @@ def detect_crt_model_1(ticker, df, tf, htf_pools):
     if tf != '1H': return None
     df = clean_df(df)
     if df is None or len(df) < 5: return None
-    
-    # Recuperiamo gli HTF dal cache
     pools = htf_pools.get(ticker)
     if not pools: return None
 
-    pdh = pools.get("PDH")
-    pdl = pools.get("PDL")
-    pdr = pools.get("PDR")
-    pwh = pools.get("PWH")
-    pwl = pools.get("PWL")
-    pmh = pools.get("PMH")
-    pml = pools.get("PML")
-    adr = pools.get("ADR_10")
+    pdh, pdl, pdr, adr = pools.get("PDH"), pools.get("PDL"), pools.get("PDR"), pools.get("ADR_10")
+    pwh, pwl, pmh, pml = pools.get("PWH"), pools.get("PWL"), pools.get("PMH"), pools.get("PML")
 
     if not all([pdh, pdl, pdr, adr, pmh, pml, pwh, pwl]): return None
+    if pdr < (adr * 0.90): return None
 
-    # FILTRO ADR: Se il range del giorno precedente è < 90% dell'ADR a 10 giorni, saltiamo
-    if pdr < (adr * 0.90):
-        return None
-
-    # L'ULTIMA CANDELA H1 CHIUSA DEFINITIVAMENTE
     c = df.iloc[-2]
     c_open, c_close = to_f(c['Open']), to_f(c['Close'])
     c_high, c_low = to_f(c['High']), to_f(c['Low'])
     c_range = c_high - c_low
-    
     if c_range == 0: return None
 
-    # --- FILTRO ESTREMO ASSOLUTO (Absolute Extremum Filter) ---
-    # Controlliamo le ultime 50 ore di contrattazione (circa 2 giorni)
     context_window = df.iloc[-52:-2]
     if context_window.empty: return None
     recent_min = to_f(context_window['Low'].min())
     recent_max = to_f(context_window['High'].max())
 
-    # --- SETUP SHORT (Bearish Model #1) ---
-    # Lo Sweep deve essere l'Estremo Assoluto recente
-    if recent_max > c_high:
-        return None
-
-    if c_high > pmh and c_close < pmh:
-        swept_level = 'PMH'
-        diamond_score = 'A+++'
-        level_val = pmh
-        tp = pml
-    elif c_high > pwh and c_close < pwh:
-        swept_level = 'PWH'
-        diamond_score = 'A++'
-        level_val = pwh
-        tp = pwl
-    elif c_high > pdh and c_close < pdh:
-        swept_level = 'PDH'
-        diamond_score = 'A+'
-        level_val = pdh
-        tp = pdl
-    else:
-        level_val = None
-
-    if level_val is not None:
-        # Displacement Rule: Rossa (C < O) E chiude nella metà inferiore
-        if c_close < c_open and c_close <= (c_low + c_range * 0.5):
+    # Bearish
+    if recent_max <= c_high:
+        level_val, swept_level, diamond_score, tp = None, None, None, None
+        if c_high > pmh and c_close < pmh:
+            level_val, swept_level, diamond_score, tp = pmh, 'PMH', 'A+++', pml
+        elif c_high > pwh and c_close < pwh:
+            level_val, swept_level, diamond_score, tp = pwh, 'PWH', 'A++', pwl
+        elif c_high > pdh and c_close < pdh:
+            level_val, swept_level, diamond_score, tp = pdh, 'PDH', 'A+', pdl
+        
+        if level_val and c_close < c_open and c_close <= (c_low + c_range * 0.5):
             entry = c_close
-            sl = c_high + (c_close * 0.001) # Fisso: poco sopra la wick
+            sl = c_high + (c_close * 0.001)
             if sl > entry and entry > tp:
                 return create_pure_crt_signal(ticker, tf, "bearish_tbs", "Bearish Model #1", c_high, c_low, entry, sl, tp, diamond_score, swept_level)
 
-    # --- SETUP LONG (Bullish Model #1) ---
-    # Lo Sweep deve essere l'Estremo Assoluto recente
-    if recent_min < c_low:
-        return None
-
-    if c_low < pml and c_close > pml:
-        swept_level = 'PML'
-        diamond_score = 'A+++'
-        level_val = pml
-        tp = pmh
-    elif c_low < pwl and c_close > pwl:
-        swept_level = 'PWL'
-        diamond_score = 'A++'
-        level_val = pwl
-        tp = pwh
-    elif c_low < pdl and c_close > pdl:
-        swept_level = 'PDL'
-        diamond_score = 'A+'
-        level_val = pdl
-        tp = pdh
-    else:
-        level_val = None
-
-    if level_val is not None:
-        # Displacement Rule: Verde (C > O) E chiude nella metà superiore
-        if c_close > c_open and c_close >= (c_high - c_range * 0.5):
+    # Bullish
+    if recent_min >= c_low:
+        level_val, swept_level, diamond_score, tp = None, None, None, None
+        if c_low < pml and c_close > pml:
+            level_val, swept_level, diamond_score, tp = pml, 'PML', 'A+++', pmh
+        elif c_low < pwl and c_close > pwl:
+            level_val, swept_level, diamond_score, tp = pwl, 'PWL', 'A++', pwh
+        elif c_low < pdl and c_close > pdl:
+            level_val, swept_level, diamond_score, tp = pdl, 'PDL', 'A+', pdh
+            
+        if level_val and c_close > c_open and c_close >= (c_high - c_range * 0.5):
             entry = c_close
-            sl = c_low - (c_close * 0.001) # Fisso: poco sotto la wick
+            sl = c_low - (c_close * 0.001)
             if sl < entry and entry < tp:
                 return create_pure_crt_signal(ticker, tf, "bullish_tbs", "Bullish Model #1", c_high, c_low, entry, sl, tp, diamond_score, swept_level)
-
     return None
 
-# --- 7. MAIN ENGINE ---
 def main():
     setup_logging()
     setup_supabase()
@@ -340,81 +374,83 @@ def main():
 
     logger.info("🚀 Avvio scanner_new (Pure CRT Model #1)...")
     
-    # Arg parser default a SP500 e Nasdaq per facilità
     all_tickers = get_sp500_tickers() + get_nasdaq100_tickers() + get_forex_tickers() + get_crypto_tickers()
     tickers = list(set(all_tickers))
     logger.info(f"Totale Ticker unici: {len(tickers)}")
 
-    # Filtro Market Cap semplificato
     def check_mcap(t):
         try:
             ticker_obj = yf.Ticker(t)
             mcap = ticker_obj.fast_info.get("marketCap", 0) if hasattr(ticker_obj, 'fast_info') else 0
             return t if mcap >= 10_000_000_000 else None
-        except:
-            return None
+        except: return None
 
-    logger.info("Filtro Market Cap in corso... (Minimo 10B)")
+    logger.info("Filtro Market Cap in corso...")
     filtered_tickers = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         for res in executor.map(check_mcap, tickers):
             if res: filtered_tickers.append(res)
-    
     tickers = filtered_tickers
-    logger.info(f"Ticker rimanenti post M-Cap: {len(tickers)}")
+    logger.info(f"Ticker post M-Cap: {len(tickers)}")
     if not tickers: return
 
-    # ONE ACTIVE TRADE POLICY PREFETCH
     active_signals_map = {}
     try:
-        res = supabase.table("crt_signals").select("id, symbol").eq("is_active", True).execute()
+        res = supabase.table("crt_signals").select("*").eq("is_active", True).execute()
         for x in res.data:
-            active_signals_map[x['symbol']] = True
+            t = x['symbol']
+            if t not in active_signals_map: active_signals_map[t] = []
+            active_signals_map[t].append(x)
+        logger.info(f"Caricati {len(res.data)} segnali attivi.")
     except Exception as e:
-        logger.error(f"Errore recupero trade attivi: {e}")
+        logger.error(f"Errore trade attivi: {e}")
 
     prefetch_all_htf_liquidity(tickers)
 
     for tf, cfg in TF_CONFIG.items():
-        logger.info(f"=== Download Bulk {tf} ===")
+        logger.info(f"=== Scansione {tf} ===")
         try:
             data = yf.download(tickers, period=cfg['period'], interval=cfg['interval'], group_by='ticker', threads=True, progress=False)
-        except Exception as e:
-            logger.error(f"Errore download {tf}: {e}")
-            continue
+            if data.empty: continue
 
-        if data.empty: continue
+            for ticker in tickers:
+                try:
+                    df = data[ticker] if len(tickers) > 1 else data
+                    df = df.dropna()
+                    if df.empty: continue
 
-        for ticker in tickers:
-            if active_signals_map.get(ticker):
-                continue # Ha già un trade aperto
+                    updates = validate_existing_signals(ticker, df, active_signals_map)
+                    for up in updates:
+                        try:
+                            sig_id = up.pop('id')
+                            supabase.table("crt_signals").update(up).eq("id", sig_id).execute()
+                        except Exception as e:
+                            logger.error(f"Errore update {ticker}: {e}")
 
-            try:
-                df = data[ticker] if len(tickers) > 1 else data
-                df = df.dropna()
-                if df.empty: continue
+                    has_active = False
+                    if ticker in active_signals_map:
+                        expired_ids = [u.get('id') for u in updates if u.get('is_active') == False]
+                        for sig in active_signals_map[ticker]:
+                            if sig['id'] not in expired_ids:
+                                has_active = True
+                                break
+                    if has_active: continue
 
-                # Filtro Penny Stock
-                if float(df['Close'].iloc[-1]) < 5.00:
-                    continue
-
-                signal = detect_crt_model_1(ticker, df, tf, LIQUIDITY_CACHE)
-                
-                if signal:
-                    # R/R ratio deve essere superire a 1.0 (Come da prompt)
-                    if signal['rr_ratio'] > 1.0:
-                        logger.info(f"🎯 TROVATO PURE CRT {signal['type'].upper()} su {ticker} | Entry: {signal['entry_price']} | SL: {signal['stop_loss']} | TP: {signal['take_profit']} | R/R: {signal['rr_ratio']}")
+                    if float(df['Close'].iloc[-1]) < 5.00: continue
+                    signal = detect_crt_model_1(ticker, df, tf, LIQUIDITY_CACHE)
+                    if signal and signal['rr_ratio'] > 1.0:
+                        logger.info(f"🎯 TROVATO {ticker} R/R: {signal['rr_ratio']}")
                         try:
                             supabase.table("crt_signals").insert(signal).execute()
-                            active_signals_map[ticker] = True # Mark come attivo
+                            if ticker not in active_signals_map: active_signals_map[ticker] = []
+                            active_signals_map[ticker].append(signal)
                         except Exception as e:
-                            logger.error(f"Errore salvataggio segnale {ticker}: {e}")
-                            
-            except Exception as e:
-                # Silenzioso sui ticker rotti
-                pass
+                            logger.error(f"Errore save {ticker}: {e}")
+                except Exception: pass
+        except Exception as e:
+            logger.error(f"Errore download {tf}: {e}")
 
-    logger.info("✅ Scansione Pure CRT Model #1 Completata!")
+    logger.info("✅ Completato!")
 
 if __name__ == "__main__":
     main()
