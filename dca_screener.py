@@ -130,62 +130,106 @@ def run_accumulation_screener():
     valid_tickers = [a["ticker"] for a in valid_assets]
     asset_dict = {a["ticker"]: a for a in valid_assets} 
 
-    # 3. Download Dati di Massa (1 Anno, Settimanale)
-    logger.info("📊 Scaricamento dati settimanali in bulk da Yahoo Finance...")
-    data = yf.download(valid_tickers, period="1y", interval="1wk", group_by='ticker', progress=False)
+    # 3. Download Dati di Massa (10 Anni, Giornaliero)
+    logger.info("📊 Scaricamento dati decennali (10y, 1d) in bulk da Yahoo Finance...")
+    data = yf.download(valid_tickers, period="10y", interval="1d", group_by='ticker', progress=False)
     
     opportunities = []
 
-    # 4. Analisi Matematica Quant
+    # 4. Analisi Matematica Quant & Institutional Walls
     for ticker in valid_tickers:
         try:
-            # Estrazione sicura dal MultiIndex di yfinance
             df = data[ticker] if len(valid_tickers) > 1 else data
             df = df.dropna()
             
-            if df.empty or len(df) < 14:
-                continue
+            if df.empty or len(df) < 100: continue
 
             current_price = float(df['Close'].iloc[-1])
-            high_52w = float(df['High'].max())
-            
-            if high_52w <= 0: continue
-            
+            high_52w = float(df['High'].iloc[-252:].max()) # Approx 1y
             drawdown_pct = ((current_price - high_52w) / high_52w) * 100
 
-            # FILTRO 1: Deep Discount (-25% a -60%)
-            if not (-60 <= drawdown_pct <= -25):
-                continue
+            # FILTRO BASE: -20% drawdown (Sconto minimo per DCA)
+            if drawdown_pct > -20: continue
 
-            # FILTRO 2: Institutional Exhaustion (Weekly RSI < 40)
-            rsi_series = ta.rsi(df['Close'], length=14)
-            if rsi_series is None or rsi_series.dropna().empty: continue
+            # --- ANALISI MULTI-TIMEFRAME (1M, 3M, 6M, 12M) ---
+            tfs = {
+                "12M": "YE-DEC", # Annual (Updated from A-DEC)
+                "6M": "6ME",    # 6 Months
+                "3M": "3ME",    # Quarter
+                "1M": "ME"      # Month
+            }
             
-            current_rsi = float(rsi_series.iloc[-1])
+            best_wall_tf = None
+            best_wall_price = 0
+            best_wall_target = 0 # <--- AGGIUNTO
+            safety_score = 0
+
+            for tf_name, tf_code in tfs.items():
+                df_res = df.resample(tf_code).agg({
+                    'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'
+                }).dropna()
+                
+                if len(df_res) < 2: continue
+                
+                wall_c = df_res.iloc[-2] # Ultima candela chiusa
+                w_o, w_c, w_h, w_l = float(wall_c['Open']), float(wall_c['Close']), float(wall_c['High']), float(wall_c['Low'])
+                w_body = abs(w_c - w_o)
+                if w_body == 0: w_body = 0.001
+                
+                # REQUISITI MURO ISTITUZIONALE (SURGICAL):
+                lower_wick_abs = abs(min(w_o, w_c) - w_l)
+                upper_wick_abs = abs(w_h - max(w_o, w_c))
+                
+                is_wall = bool((lower_wick_abs < w_body * 0.015) and (upper_wick_abs > w_body * 0.40))
+                
+                if is_wall:
+                    # Hierarchical Scoring
+                    tf_score = 100 if tf_name == "12M" else 75 if tf_name == "6M" else 50 if tf_name == "3M" else 25
+                    
+                    # Calcolo Target (Opposite Wick)
+                    wall_target = w_h # Per un supporto, il target è la punta della wick superiore HTF
+
+                    # Bonus: Sweep & Reclaim check
+                    is_secured = bool(current_price > w_l)
+                    if is_secured and current_price < w_l * 1.05: 
+                        tf_score += 25
+                    
+                    if tf_score > safety_score:
+                        safety_score = int(tf_score)
+                        best_wall_tf = str(tf_name)
+                        best_wall_price = float(w_l)
+                        best_wall_target = float(wall_target) # <--- AGGIUNTO
             
-            if current_rsi >= 40:
-                continue
+            # FILTRO 2: Institutional Exhaustion (Weekly RSI < 45)
+            # Usiamo resampling W per RSI
+            df_w = df.resample('W').last()
+            rsi_series = ta.rsi(df_w['Close'], length=14)
+            current_rsi = float(rsi_series.iloc[-1]) if rsi_series is not None and not rsi_series.empty else 50
+            
+            if current_rsi >= 45 and not best_wall_tf: continue
 
             # Assegnazione Status Visivo
             status = "PRIME DCA ZONE"
-            if drawdown_pct <= -50:
-                status = "EXTREME VALUE"
-            elif drawdown_pct <= -40:
-                status = "DEEP DISCOUNT"
+            if safety_score >= 100: status = "GENERATIONAL VALUE"
+            elif safety_score >= 75: status = "INSTITUTIONAL RADAR"
+            elif drawdown_pct <= -40: status = "DEEP DISCOUNT"
 
-            # Costruiamo il Record ESATTO per la tabella dca_assets
             opportunities.append({
-                "symbol": ticker,
-                "name": asset_dict[ticker]["name"],
-                "price": round(current_price, 2),
-                "discount": round(drawdown_pct, 2), # Negativo (es: -38.5)
-                "rsi": round(current_rsi, 1),
-                "market_cap": asset_dict[ticker]["mcap"],
-                "status": status,
-                # Formato ISO 8601 per timestamp Postgres
+                "symbol": str(ticker),
+                "name": str(asset_dict[ticker]["name"]),
+                "price": float(round(current_price, 2)),
+                "discount": float(round(drawdown_pct, 2)),
+                "rsi": float(round(current_rsi, 1)),
+                "market_cap": float(asset_dict[ticker]["mcap"]),
+                "status": str(status),
+                "wall_tf": str(best_wall_tf) if best_wall_tf else None,
+                "wall_price": float(round(best_wall_price, 2)) if best_wall_price > 0 else None,
+                "wall_opposite_target": float(round(best_wall_target, 2)) if best_wall_target > 0 else None,
+                "dca_safety_score": int(safety_score),
+                "is_wall_secured": bool(current_price > best_wall_price) if best_wall_price > 0 else False,
                 "last_scanned_at": time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()) 
             })
-            logger.info(f"🎯 MATCH TROVATO: {ticker} a {drawdown_pct:.1f}% di sconto (RSI: {current_rsi:.1f})")
+            logger.info(f"🎯 MATCH: {ticker} on {best_wall_tf if best_wall_tf else 'No'} Wall. Score: {safety_score} (RSI: {current_rsi:.1f})")
 
         except Exception as e:
             pass # Ignoriamo silenziosamente i ticker con dati sballati
