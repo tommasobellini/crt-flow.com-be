@@ -235,6 +235,10 @@ def validate_existing_signals(ticker, df, active_signals_map):
             if status != 'watchlist':
                 logger.warning(f"⚠️ {ticker} [{sig['timeframe']}]: Segnale saltato per validazione (SL o TP a zero).")
             continue
+            
+        # Protezione Monitoraggio: Validiamo solo i segnali effettivamente in gioco
+        if status not in ['active', 'pending']:
+            continue
         
         if status == 'pending':
             triggered, missed = False, False
@@ -424,47 +428,60 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
         is_perfect = pools.get(f"{code}_WALL")
         dist = abs(current_price - lv_val) / lv_val
         
-        # FASE 3: ENTRY (CRT Model #1) - RECLAIM
+        # FASE 3: ENTRY (CRT Model #1) - RECLAIM (BLINDATA)
         if is_perfect:
             setup = None
+            # RECLAIM BEARISH (SHORT): Sweep della High, Chiusura SOTTO, Candela ROSSA
             if l_type == "bearish" and recent_max <= c_high and c_high > lv_val and c_close < lv_val:
-                # 1H Mini Wick rule for short: Previous candle must be Green and have small upper wick
-                if pc_close > pc_open and pc_body > 0 and (pc_high - pc_close) <= (pc_body * 0.03):
-                    # Current sweep candle must be Red and close in the lower half
-                    if c_close < c_open and c_close <= (c_low + c_range * 0.5):
-                        setup = ("bearish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
+                if c_close < c_open: # Candela ROSSA
+                    # Rule: Previous candle must have small upper wick
+                    if pc_close > pc_open and pc_body > 0 and (pc_high - pc_close) <= (pc_body * 0.05):
+                        # Current sweep candle must close in the lower half
+                        if c_close <= (c_low + c_range * 0.5):
+                            setup = ("bearish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
+            
+            # RECLAIM BULLISH (LONG): Sweep della Low, Chiusura SOPRA, Candela VERDE
             elif l_type == "bullish" and recent_min >= c_low and c_low < lv_val and c_close > lv_val:
-                # 1H Mini Wick rule for long: Previous candle must be Red and have small lower wick
-                if pc_close < pc_open and pc_body > 0 and (pc_close - pc_low) <= (pc_body * 0.03):
-                    # Current sweep candle must be Green and close in the upper half
-                    if c_close > c_open and c_close >= (c_high - c_range * 0.5):
-                        setup = ("bullish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
+                if c_close > c_open: # Candela VERDE
+                    # Rule: Previous candle must have small lower wick
+                    if pc_close < pc_open and pc_body > 0 and (pc_close - pc_low) <= (pc_body * 0.05):
+                        # Current sweep candle must close in the upper half
+                        if c_close >= (c_high - c_range * 0.5):
+                            setup = ("bullish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
             
             if setup:
-                s_type, s_sub, d_score, lv, tier = setup
-                # Stop Loss: 1 tick sopra/sotto lo sweep 1H
-                tick = current_price * 0.0001
+                s_type, s_sub, d_score, lv, tier_code = setup
+                # Entry: Prezzo di chiusura del Reclaim (Chiamato "Blindato")
                 entry = c_close
+                # Stop Loss: 1 tick oltre lo sweep orario
+                tick = entry * 0.0001
                 sl = (c_high + tick) if l_type == "bearish" else (c_low - tick)
                 # Take Profit: Opposite Wick della candela HTF
-                wall_candle = pools.get(f"{tier}_CANDLE")
+                wall_candle = pools.get(f"{tier_code}_CANDLE")
                 tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
                 
-                signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier, wall_candle)
+                signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier_code, wall_candle)
                 
-                # Check if it was already active
-                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
-                if existing_active.data: continue # Don't double trigger
+                # Double Check: If current price is already too close to SL, skip it
+                risk = abs(entry - sl)
+                reward = abs(entry - tp)
+                if risk > 0 and (reward / risk) < 1.5:
+                     logger.warning(f"⚠️ {ticker}: Setup scartato per RR insufficiente ({round(reward/risk, 1)})")
+                     continue
 
-                # If was 'breached' or 'watchlist', upgrade it
+                # Monitor for double trigger
+                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
+                if existing_active.data: continue 
+
                 existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
                 if existing.data:
                     supabase.table("crt_signals").update(signal).eq("id", existing.data[0]['id']).execute()
-                    logger.info(f"🚀 UPGRADED to ACTIVE: {ticker} [{tier}] @ {entry}")
+                    logger.info(f"🚀 UPGRADED to ACTIVE (Confirmed): {ticker} [{tier_code}] @ {entry}")
                 else:
                     supabase.table("crt_signals").insert(signal).execute()
-                    logger.info(f"🎯 NEW ENTRY: {ticker} [{tier}] @ {entry}")
+                    logger.info(f"🎯 NEW ENTRY (Confirmed): {ticker} [{tier_code}] @ {entry}")
                 return
+            return
 
         # FASE 2: BREACHED (Sweep in corso)
         if is_perfect:
