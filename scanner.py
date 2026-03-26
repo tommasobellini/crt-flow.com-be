@@ -161,29 +161,34 @@ def prefetch_all_htf_liquidity(tickers):
                 # --- LIVELLI DAILY ---
                 d_prev = df.iloc[-2]
                 pdh, pdl = to_f(d_prev['High']), to_f(d_prev['Low'])
-                # No-Wick Check Daily
-                d_body = abs(to_f(d_prev['Close']) - to_f(d_prev['Open']))
+                d_open, d_close = to_f(d_prev['Open']), to_f(d_prev['Close'])
+                d_body = abs(d_close - d_open)
                 if d_body == 0: d_body = 0.001
-                pdh_wall = (to_f(d_prev['High']) - max(to_f(d_prev['Open']), to_f(d_prev['Close']))) < (d_body * 0.03)
-                pdl_wall = (min(to_f(d_prev['Open']), to_f(d_prev['Close'])) - to_f(d_prev['Low'])) < (d_body * 0.03)
+                
+                # PDH Perfect Wall: Green, Upper Wick < 2%, Lower Wick > 50%
+                pdh_wall = (d_close > d_open) and ((to_f(d_prev['High']) - d_close) < (d_body * 0.02)) and ((d_open - to_f(d_prev['Low'])) > (d_body * 0.5))
+                # PDL Perfect Wall: Red, Lower Wick < 2%, Upper Wick > 50%
+                pdl_wall = (d_close < d_open) and ((to_f(d_prev['Low']) - d_close) < (d_body * 0.02)) and ((to_f(d_prev['High']) - d_open) > (d_body * 0.5))
 
                 # --- LIVELLI WEEKLY ---
                 weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
                 w_prev = weekly.iloc[-2] if len(weekly) >= 2 else weekly.iloc[-1]
                 pwh, pwl = to_f(w_prev['High']), to_f(w_prev['Low'])
-                w_body = abs(to_f(w_prev['Close']) - to_f(w_prev['Open']))
+                w_open, w_close = to_f(w_prev['Open']), to_f(w_prev['Close'])
+                w_body = abs(w_close - w_open)
                 if w_body == 0: w_body = 0.001
-                pwh_wall = (to_f(w_prev['High']) - max(to_f(w_prev['Open']), to_f(w_prev['Close']))) < (w_body * 0.03)
-                pwl_wall = (min(to_f(w_prev['Open']), to_f(w_prev['Close'])) - to_f(w_prev['Low'])) < (w_body * 0.03)
+                pwh_wall = (w_close > w_open) and ((to_f(w_prev['High']) - w_close) < (w_body * 0.02)) and ((w_open - to_f(w_prev['Low'])) > (w_body * 0.5))
+                pwl_wall = (w_close < w_open) and ((to_f(w_prev['Low']) - w_close) < (w_body * 0.02)) and ((to_f(w_prev['High']) - w_open) > (w_body * 0.5))
 
                 # --- LIVELLI MONTHLY ---
                 monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
                 m_prev = monthly.iloc[-2] if len(monthly) >= 2 else monthly.iloc[-1]
                 pmh, pml = to_f(m_prev['High']), to_f(m_prev['Low'])
-                m_body = abs(to_f(m_prev['Close']) - to_f(m_prev['Open']))
+                m_open, m_close = to_f(m_prev['Open']), to_f(m_prev['Close'])
+                m_body = abs(m_close - m_open)
                 if m_body == 0: m_body = 0.001
-                pmh_wall = (to_f(m_prev['High']) - max(to_f(m_prev['Open']), to_f(m_prev['Close']))) < (m_body * 0.03)
-                pml_wall = (min(to_f(m_prev['Open']), to_f(m_prev['Close'])) - to_f(m_prev['Low'])) < (m_body * 0.03)
+                pmh_wall = (m_close > m_open) and ((to_f(m_prev['High']) - m_close) < (m_body * 0.02)) and ((m_open - to_f(m_prev['Low'])) > (m_body * 0.5))
+                pml_wall = (m_close < m_open) and ((to_f(m_prev['Low']) - m_close) < (m_body * 0.02)) and ((to_f(m_prev['High']) - m_open) > (m_body * 0.5))
 
                 # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
@@ -191,8 +196,14 @@ def prefetch_all_htf_liquidity(tickers):
 
                 LIQUIDITY_CACHE[ticker] = {
                     "PDH": pdh, "PDL": pdl, "PDH_WALL": pdh_wall, "PDL_WALL": pdl_wall,
+                    "PDH_CANDLE": {"t": str(d_prev.name), "o": d_open, "h": pdh, "l": pdl, "c": d_close},
+                    "PDL_CANDLE": {"t": str(d_prev.name), "o": d_open, "h": pdh, "l": pdl, "c": d_close},
                     "PWH": pwh, "PWL": pwl, "PWH_WALL": pwh_wall, "PWL_WALL": pwl_wall,
+                    "PWH_CANDLE": {"t": str(w_prev.name), "o": w_open, "h": pwh, "l": pwl, "c": w_close},
+                    "PWL_CANDLE": {"t": str(w_prev.name), "o": w_open, "h": pwh, "l": pwl, "c": w_close},
                     "PMH": pmh, "PML": pml, "PMH_WALL": pmh_wall, "PML_WALL": pml_wall,
+                    "PMH_CANDLE": {"t": str(m_prev.name), "o": m_open, "h": pmh, "l": pml, "c": m_close},
+                    "PML_CANDLE": {"t": str(m_prev.name), "o": m_open, "h": pmh, "l": pml, "c": m_close},
                     "ADR_10": adr_10, "PDR": pdh - pdl
                 }
             except Exception: continue
@@ -297,10 +308,26 @@ def validate_existing_signals(ticker, df, active_signals_map):
     return updates
 
 # --- 7. LOGICA PURE CRT MODEL #1 ---
-def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp, diamond_score, swept_level):
+def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp, diamond_score, swept_level, wall_candle_data):
     rr_ratio = 0
     if abs(entry - sl) > 0:
         rr_ratio = abs(entry - tp) / abs(entry - sl)
+    
+    # Surgical metadata for chart highlighting
+    trigger_metadata = {
+        "wall_candle_time": wall_candle_data.get('t'),
+        "wall_high": wall_candle_data.get('h'),
+        "wall_low": wall_candle_data.get('l'),
+        "opposite_wick_limit": tp,
+        "wall_coords": {
+            "time": wall_candle_data.get('t'),
+            "open": wall_candle_data.get('o'),
+            "high": wall_candle_data.get('h'),
+            "low": wall_candle_data.get('l'),
+            "close": wall_candle_data.get('c')
+        }
+    }
+
     return {
         "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
         "range_high": round(high, 2), "range_low": round(low, 2),
@@ -313,38 +340,64 @@ def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp
         "has_divergence": False, "seasonality_score": 0, "seasonality_data": "{}",
         "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
         "rel_volume": 0, "volatility_warning": False, "is_golden_wick": False, "touches": 1,
-        "market_bias": None, "max_favorable_excursion": 0.0, "trigger_candles": None
+        "market_bias": None, "max_favorable_excursion": 0.0, 
+        "trigger_candles": json.dumps(trigger_metadata) # Packing everything here for the chart
     }
 
-def create_watchlist_signal(ticker, tf, tier, level_val, dist):
+def create_watchlist_signal(ticker, tf, tier, level_val, dist, wall_candle=None):
+    trigger_metadata = {}
+    is_bearish = "H" in tier # PDH, PWH, PMH
+    
+    tp = 0
+    sl = 0
+    if wall_candle:
+        trigger_metadata = {
+            "wall_coords": {
+                "time": wall_candle.get('t'),
+                "open": wall_candle.get('o'),
+                "high": wall_candle.get('h'),
+                "low": wall_candle.get('l'),
+                "close": wall_candle.get('c')
+            }
+        }
+        # Take Profit: Opposite Wick of HTF source candle
+        tp = wall_candle['l'] if is_bearish else wall_candle['h']
+        # Preliminary Stop Loss: 0.5% safety buffer behind the wall
+        sl = level_val * 1.005 if is_bearish else level_val * 0.995
+
     return {
-        "symbol": ticker, "timeframe": tf, "type": "watchlist", 
+        "symbol": ticker, "timeframe": tf, "type": "bearish_tbs" if is_bearish else "bullish_tbs", 
         "subtype": f"Approaching {tier}", "price": round(level_val, 2),
+        "entry_price": round(level_val, 2),
+        "stop_loss": round(sl, 2),
+        "take_profit": round(tp, 2),
         "status": "watchlist", "is_active": True,
         "liquidity_tier": tier, "diamond_score": "PRE-ALERT",
-        "confluence_level": f"Dist: {round(dist*100, 2)}%"
+        "confluence_level": f"Dist: {round(dist*100, 2)}%",
+        "trigger_candles": json.dumps(trigger_metadata)
     }
 
-def detect_crt_model_1(ticker, df, tf, htf_pools):
-    if tf != '1H': return None
+def update_signal_lifecycle(ticker, df, tf, htf_pools):
+    if tf != '1H': return
     df = clean_df(df)
-    if df is None or len(df) < 5: return None
+    if df is None or len(df) < 5: return
     pools = htf_pools.get(ticker)
-    if not pools: return None
+    if not pools: return
 
-    # Estrazione pool e flag No-Wick
-    pdh, pdl = pools["PDH"], pools["PDL"]
-    pwh, pwl = pools["PWH"], pools["PWL"]
-    pmh, pml = pools["PMH"], pools["PML"]
+    current_price = to_f(df['Close'].iloc[-1])
+    current_low = to_f(df['Low'].iloc[-1])
+    current_high = to_f(df['High'].iloc[-1])
     
+    # 1. Analisi Segnale Attivo Reclaim (TBS) - CRT Model 1
+    if len(df) < 3: return
     c = df.iloc[-2] # Candela di Sweep 1H
     prev_candle = df.iloc[-3] # Candela precedente 1H
     
     c_open, c_close = to_f(c['Open']), to_f(c['Close'])
     c_high, c_low = to_f(c['High']), to_f(c['Low'])
     c_range = c_high - c_low
-    if c_range == 0: return None
-
+    if c_range == 0: c_range = 0.001
+    
     pc_open, pc_close = to_f(prev_candle['Open']), to_f(prev_candle['Close'])
     pc_high, pc_low = to_f(prev_candle['High']), to_f(prev_candle['Low'])
     pc_body = abs(pc_close - pc_open)
@@ -352,73 +405,89 @@ def detect_crt_model_1(ticker, df, tf, htf_pools):
     context_window = df.iloc[-52:-2]
     recent_min, recent_max = to_f(context_window['Low'].min()), to_f(context_window['High'].max())
 
-    # --- LOGICA BEARISH (Sweep del Massimo) ---
-    if recent_max <= c_high:
-        setup = None
-        # Priorità Mensile -> Settimanale -> Giornaliero
-        if c_high > pmh and c_close < pmh and pools.get("PMH_WALL"):
-            setup = ("bearish_tbs", "Monthly No-Wick Sweep", "A+++", pmh, pml, "PMH")
-        elif c_high > pwh and c_close < pwh and pools.get("PWH_WALL"):
-            setup = ("bearish_tbs", "Weekly No-Wick Sweep", "A++", pwh, pwl, "PWH")
-        elif c_high > pdh and c_close < pdh and pools.get("PDH_WALL"):
-            setup = ("bearish_tbs", "Daily No-Wick Sweep", "A+", pdh, pdl, "PDH")
-
-        if setup:
-            # INTEGRATE 1H Mini Wick Rule for Short
-            if pc_close <= pc_open: setup = None # Must be Green
-            elif pc_body == 0: setup = None
-            elif (pc_high - pc_close) > (pc_body * 0.03): setup = None # Small upper wick
-
-        if setup and c_close < c_open and c_close <= (c_low + c_range * 0.5):
-            s_type, s_sub, d_score, lv, target, tier = setup
-            entry, sl = c_close, c_high + (c_close * 0.001)
-            return create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, target, d_score, tier)
-
-    # --- LOGICA BULLISH (Sweep del Minimo) ---
-    if recent_min >= c_low:
-        setup = None
-        if c_low < pml and c_close > pml and pools.get("PML_WALL"):
-            setup = ("bullish_tbs", "Monthly No-Wick Sweep", "A+++", pml, pmh, "PML")
-        elif c_low < pwl and c_close > pwl and pools.get("PWL_WALL"):
-            setup = ("bullish_tbs", "Weekly No-Wick Sweep", "A++", pwl, pwh, "PWL")
-        elif c_low < pdl and c_close > pdl and pools.get("PDL_WALL"):
-            setup = ("bullish_tbs", "Daily No-Wick Sweep", "A+", pdl, pdh, "PDL")
-
-        if setup:
-            # INTEGRATE 1H Mini Wick Rule for Long
-            if pc_close >= pc_open: setup = None # Must be Red
-            elif pc_body == 0: setup = None
-            elif (pc_close - pc_low) > (pc_body * 0.03): setup = None # Small lower wick
-
-        if setup and c_close > c_open and c_close >= (c_high - c_range * 0.5):
-            s_type, s_sub, d_score, lv, target, tier = setup
-            entry, sl = c_close, c_low - (c_close * 0.001)
-            return create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, target, d_score, tier)
-
-    # --- LOGICA WATCHLIST (KILLZONE) ---
-    current_price = to_f(df['Close'].iloc[-1])
-    threshold = 0.005 # 0.5% (Watchlist)
-
     levels_to_check = [
-        (pmh, "Monthly Wall (High)", "PMH"), (pml, "Monthly Wall (Low)", "PML"),
-        (pwh, "Weekly Wall (High)", "PWH"), (pwl, "Weekly Wall (Low)", "PWL"),
-        (pdh, "Daily Wall (High)", "PDH"), (pdl, "Daily Wall (Low)", "PDL")
+        (pools["PMH"], "Monthly Wall", "PMH", "bearish"), 
+        (pools["PML"], "Monthly Wall", "PML", "bullish"),
+        (pools["PWH"], "Weekly Wall", "PWH", "bearish"), 
+        (pools["PWL"], "Weekly Wall", "PWL", "bullish"),
+        (pools["PDH"], "Daily Wall", "PDH", "bearish"), 
+        (pools["PDL"], "Daily Wall", "PDL", "bullish")
     ]
 
-    for lv_val, lv_name, code in levels_to_check:
+    for lv_val, lv_name, code, l_type in levels_to_check:
+        is_perfect = pools.get(f"{code}_WALL")
         dist = abs(current_price - lv_val) / lv_val
-        if dist <= threshold:
-            try:
-                # Check for existing watchlist signal
-                existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "watchlist").execute()
-                if not existing.data:
-                    watchlist_sig = create_watchlist_signal(ticker, tf, code, lv_val, dist)
-                    supabase.table("crt_signals").insert(watchlist_sig).execute()
-                    logger.info(f"👀 {ticker} aggiunto alla WATCHLIST ({code})")
-            except Exception as e:
-                logger.error(f"Errore watchlist update: {e}")
+        
+        # FASE 3: ENTRY (CRT Model #1) - RECLAIM
+        if is_perfect:
+            setup = None
+            if l_type == "bearish" and recent_max <= c_high and c_high > lv_val and c_close < lv_val:
+                # 1H Mini Wick rule for short: Previous candle must be Green and have small upper wick
+                if pc_close > pc_open and pc_body > 0 and (pc_high - pc_close) <= (pc_body * 0.03):
+                    # Current sweep candle must be Red and close in the lower half
+                    if c_close < c_open and c_close <= (c_low + c_range * 0.5):
+                        setup = ("bearish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
+            elif l_type == "bullish" and recent_min >= c_low and c_low < lv_val and c_close > lv_val:
+                # 1H Mini Wick rule for long: Previous candle must be Red and have small lower wick
+                if pc_close < pc_open and pc_body > 0 and (pc_close - pc_low) <= (pc_body * 0.03):
+                    # Current sweep candle must be Green and close in the upper half
+                    if c_close > c_open and c_close >= (c_high - c_range * 0.5):
+                        setup = ("bullish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
+            
+            if setup:
+                s_type, s_sub, d_score, lv, tier = setup
+                # Stop Loss: 1 tick sopra/sotto lo sweep 1H
+                tick = current_price * 0.0001
+                entry = c_close
+                sl = (c_high + tick) if l_type == "bearish" else (c_low - tick)
+                # Take Profit: Opposite Wick della candela HTF
+                wall_candle = pools.get(f"{tier}_CANDLE")
+                tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
+                
+                signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier, wall_candle)
+                
+                # Check if it was already active
+                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
+                if existing_active.data: continue # Don't double trigger
 
-    return None
+                # If was 'breached' or 'watchlist', upgrade it
+                existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
+                if existing.data:
+                    supabase.table("crt_signals").update(signal).eq("id", existing.data[0]['id']).execute()
+                    logger.info(f"🚀 UPGRADED to ACTIVE: {ticker} [{tier}] @ {entry}")
+                else:
+                    supabase.table("crt_signals").insert(signal).execute()
+                    logger.info(f"🎯 NEW ENTRY: {ticker} [{tier}] @ {entry}")
+                return
+
+        # FASE 2: BREACHED (Sweep in corso)
+        if is_perfect:
+            is_breached = False
+            if l_type == "bearish" and current_high > lv_val: is_breached = True
+            elif l_type == "bullish" and current_low < lv_val: is_breached = True
+            
+            if is_breached:
+                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
+                if existing_active.data: continue
+
+                existing = supabase.table("crt_signals").select("id", "status").eq("symbol", ticker).eq("is_active", True).execute()
+                if not existing.data or existing.data[0]['status'] == 'watchlist':
+                    if not existing.data:
+                        sig = create_watchlist_signal(ticker, tf, code, lv_val, 0, pools.get(f"{code}_CANDLE"))
+                        sig["status"] = "breached"
+                        supabase.table("crt_signals").insert(sig).execute()
+                    else:
+                        supabase.table("crt_signals").update({"status": "breached", "subtype": f"RECLAIMING {code}"}).eq("id", existing.data[0]['id']).execute()
+                    logger.info(f"⚠️ {ticker} BREACHED {code} (Sweep in corso)")
+                continue
+
+        # FASE 1: WATCHLIST (Prossimità)
+        if dist <= 0.005 and is_perfect:
+            existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).execute()
+            if not existing.data:
+                watchlist_sig = create_watchlist_signal(ticker, tf, code, lv_val, dist, pools.get(f"{code}_CANDLE"))
+                supabase.table("crt_signals").insert(watchlist_sig).execute()
+                logger.info(f"👀 {ticker} added to WATCHLIST ({code})")
 
 def main():
     setup_logging()
@@ -429,7 +498,7 @@ def main():
             sys.stdout.reconfigure(encoding='utf-8')
         except: pass
 
-    logger.info("🚀 Avvio scanner_new (Pure CRT Model #1)...")
+    logger.info("🚀 Avvio scanner_new (Proactive Institutional Terminal)...")
     
     all_tickers = get_sp500_tickers() + get_nasdaq100_tickers() + get_forex_tickers() + get_crypto_tickers()
     tickers = list(set(all_tickers))
@@ -484,26 +553,12 @@ def main():
                         except Exception as e:
                             logger.error(f"Errore update {ticker}: {e}")
 
-                    has_active = False
-                    if ticker in active_signals_map:
-                        expired_ids = [u.get('id') for u in updates if u.get('is_active') == False]
-                        for sig in active_signals_map[ticker]:
-                            if sig['id'] not in expired_ids:
-                                has_active = True
-                                break
-                    if has_active: continue
+                    # Only run lifecycle if no active signal (or update existing)
+                    if float(df['Close'].iloc[-1]) < 0.1: continue
+                    update_signal_lifecycle(ticker, df, tf, LIQUIDITY_CACHE)
 
-                    if float(df['Close'].iloc[-1]) < 5.00: continue
-                    signal = detect_crt_model_1(ticker, df, tf, LIQUIDITY_CACHE)
-                    if signal and signal['rr_ratio'] > 1.0:
-                        logger.info(f"🎯 TROVATO {ticker} R/R: {signal['rr_ratio']}")
-                        try:
-                            supabase.table("crt_signals").insert(signal).execute()
-                            if ticker not in active_signals_map: active_signals_map[ticker] = []
-                            active_signals_map[ticker].append(signal)
-                        except Exception as e:
-                            logger.error(f"Errore save {ticker}: {e}")
-                except Exception: pass
+                except Exception as e: 
+                    logger.error(f"Errore loop {ticker}: {e}")
         except Exception as e:
             logger.error(f"Errore download {tf}: {e}")
 
