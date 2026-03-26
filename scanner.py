@@ -230,6 +230,12 @@ def validate_existing_signals(ticker, df, active_signals_map):
         s_type = sig.get('type', '')
         status = sig.get('status', 'active')
         
+        # Protezione d'urgenza: se SL o TP sono zero, non validiamo l'uscita
+        if sl == 0 or tp == 0:
+            if status != 'watchlist':
+                logger.warning(f"⚠️ {ticker} [{sig['timeframe']}]: Segnale saltato per validazione (SL o TP a zero).")
+            continue
+        
         if status == 'pending':
             triggered, missed = False, False
             if 'bullish' in s_type:
