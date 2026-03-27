@@ -103,7 +103,7 @@ def check_market_cap(ticker_symbol: str):
         ticker = yf.Ticker(ticker_symbol)
         if hasattr(ticker, 'fast_info'):
             mcap = ticker.fast_info.get("marketCap", 0)
-            if mcap >= 50_000_000_000:
+            if mcap >= 10_000_000_000: # Lowered from 50B to 10B
                 name = ticker.info.get('shortName', ticker_symbol) if hasattr(ticker, 'info') else ticker_symbol
                 return {"ticker": ticker_symbol, "name": name, "mcap": mcap}
     except:
@@ -116,7 +116,7 @@ def run_accumulation_screener():
 
     # 1. Raccolta Tickers
     all_tickers = list(set(get_sp500_tickers() + get_nasdaq100_tickers()))
-    logger.info(f"Trovati {len(all_tickers)} ticker unici. Esecuzione filtro Market Cap (> $50B)...")
+    logger.info(f"Trovati {len(all_tickers)} ticker unici. Esecuzione filtro Market Cap (> $10B)...")
 
     # 2. Filtro Market Cap Parallelo (Estremamente veloce)
     valid_assets = []
@@ -124,7 +124,7 @@ def run_accumulation_screener():
         for result in executor.map(check_market_cap, all_tickers):
             if result: valid_assets.append(result)
 
-    logger.info(f"🏢 Aziende qualificate (Mega Caps): {len(valid_assets)}")
+    logger.info(f"🏢 Aziende qualificate (Mega/Large Caps): {len(valid_assets)}")
     if not valid_assets: return
 
     valid_tickers = [a["ticker"] for a in valid_assets]
@@ -153,10 +153,10 @@ def run_accumulation_screener():
 
             # --- ANALISI MULTI-TIMEFRAME (1M, 3M, 6M, 12M) ---
             tfs = {
-                "12M": "YE-DEC", # Annual (Updated from A-DEC)
-                "6M": "6ME",    # 6 Months
-                "3M": "3ME",    # Quarter
-                "1M": "ME"      # Month
+                "12M": "YE",   # Annual
+                "6M": "6MS",   # 6 Months (Start)
+                "3M": "3MS",   # Quarter (Start)
+                "1M": "MS"     # Month (Start)
             }
             
             best_wall_tf = None
@@ -180,7 +180,21 @@ def run_accumulation_screener():
                 lower_wick_abs = abs(min(w_o, w_c) - w_l)
                 upper_wick_abs = abs(w_h - max(w_o, w_c))
                 
-                is_wall = bool((lower_wick_abs < w_body * 0.015) and (upper_wick_abs > w_body * 0.40))
+                # RELAXED FILTERS (User Feedback):
+                # 1. No-Wick side: < 5% of body (was 1.5%)
+                # 2. Opposite side: > 15% of body (was 40%)
+                is_wall = bool((lower_wick_abs < w_body * 0.05) and (upper_wick_abs > w_body * 0.15))
+                
+                if ticker == os.getenv("DEBUG_TICKER"):
+                    logger.info(f"DEBUG {ticker} {tf_name}: Body={round(w_body,2)}, LowWick={round(lower_wick_abs,2)}, Req=<{round(w_body*0.05,2)}")
+                    if lower_wick_abs < w_body * 0.05:
+                        logger.info(f"✅ {ticker} passed LowWick filter, checking OppWick...")
+                        if upper_wick_abs > w_body * 0.15:
+                            logger.info(f"✅ {ticker} passed OppWick filter!")
+                        else:
+                            logger.info(f"❌ {ticker} failed OppWick (actual {round(upper_wick_abs,2)} < req {round(w_body*0.15,2)})")
+                    else:
+                        logger.info(f"❌ {ticker} failed LowWick (actual {round(lower_wick_abs,2)} > req {round(w_body*0.05,2)})")
                 
                 if is_wall:
                     # Hierarchical Scoring

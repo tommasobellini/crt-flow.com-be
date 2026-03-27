@@ -165,10 +165,10 @@ def prefetch_all_htf_liquidity(tickers):
                 d_body = abs(d_close - d_open)
                 if d_body == 0: d_body = 0.001
                 
-                # PDH Perfect Wall: Green, Upper Wick < 2%, Lower Wick > 50%
-                pdh_wall = (d_close > d_open) and ((to_f(d_prev['High']) - d_close) < (d_body * 0.02)) and ((d_open - to_f(d_prev['Low'])) > (d_body * 0.5))
-                # PDL Perfect Wall: Red, Lower Wick < 2%, Upper Wick > 50%
-                pdl_wall = (d_close < d_open) and ((to_f(d_prev['Low']) - d_close) < (d_body * 0.02)) and ((to_f(d_prev['High']) - d_open) > (d_body * 0.5))
+                # PDH Perfect Wall: Green, Upper Wick < 10%, Lower Wick > 5%
+                pdh_wall = (d_close > d_open) and ((to_f(d_prev['High']) - d_close) < (d_body * 0.10)) and ((d_open - to_f(d_prev['Low'])) > (d_body * 0.05))
+                # PDL Perfect Wall: Red, Lower Wick < 10%, Upper Wick > 5%
+                pdl_wall = (d_close < d_open) and ((to_f(d_prev['Low']) - d_close) < (d_body * 0.10)) and ((to_f(d_prev['High']) - d_open) > (d_body * 0.05))
 
                 # --- LIVELLI WEEKLY ---
                 weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -177,18 +177,18 @@ def prefetch_all_htf_liquidity(tickers):
                 w_open, w_close = to_f(w_prev['Open']), to_f(w_prev['Close'])
                 w_body = abs(w_close - w_open)
                 if w_body == 0: w_body = 0.001
-                pwh_wall = (w_close > w_open) and ((to_f(w_prev['High']) - w_close) < (w_body * 0.02)) and ((w_open - to_f(w_prev['Low'])) > (w_body * 0.5))
-                pwl_wall = (w_close < w_open) and ((to_f(w_prev['Low']) - w_close) < (w_body * 0.02)) and ((to_f(w_prev['High']) - w_open) > (w_body * 0.5))
+                pwh_wall = (w_close > w_open) and ((to_f(w_prev['High']) - w_close) < (w_body * 0.10)) and ((w_open - to_f(w_prev['Low'])) > (w_body * 0.05))
+                pwl_wall = (w_close < w_open) and ((to_f(w_prev['Low']) - w_close) < (w_body * 0.10)) and ((to_f(w_prev['High']) - w_open) > (w_body * 0.05))
 
                 # --- LIVELLI MONTHLY ---
-                monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
+                monthly = df.resample('M').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
                 m_prev = monthly.iloc[-2] if len(monthly) >= 2 else monthly.iloc[-1]
                 pmh, pml = to_f(m_prev['High']), to_f(m_prev['Low'])
                 m_open, m_close = to_f(m_prev['Open']), to_f(m_prev['Close'])
                 m_body = abs(m_close - m_open)
                 if m_body == 0: m_body = 0.001
-                pmh_wall = (m_close > m_open) and ((to_f(m_prev['High']) - m_close) < (m_body * 0.02)) and ((m_open - to_f(m_prev['Low'])) > (m_body * 0.5))
-                pml_wall = (m_close < m_open) and ((to_f(m_prev['Low']) - m_close) < (m_body * 0.02)) and ((to_f(m_prev['High']) - m_open) > (m_body * 0.5))
+                pmh_wall = (m_close > m_open) and ((to_f(m_prev['High']) - m_close) < (m_body * 0.10)) and ((m_open - to_f(m_prev['Low'])) > (m_body * 0.05))
+                pml_wall = (m_close < m_open) and ((to_f(m_prev['Low']) - m_close) < (m_body * 0.10)) and ((to_f(m_prev['High']) - m_open) > (m_body * 0.05))
 
                 # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
@@ -395,26 +395,7 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
     if not pools: return
 
     current_price = to_f(df['Close'].iloc[-1])
-    current_low = to_f(df['Low'].iloc[-1])
-    current_high = to_f(df['High'].iloc[-1])
     
-    # 1. Analisi Segnale Attivo Reclaim (TBS) - CRT Model 1
-    if len(df) < 3: return
-    c = df.iloc[-2] # Candela di Sweep 1H
-    prev_candle = df.iloc[-3] # Candela precedente 1H
-    
-    c_open, c_close = to_f(c['Open']), to_f(c['Close'])
-    c_high, c_low = to_f(c['High']), to_f(c['Low'])
-    c_range = c_high - c_low
-    if c_range == 0: c_range = 0.001
-    
-    pc_open, pc_close = to_f(prev_candle['Open']), to_f(prev_candle['Close'])
-    pc_high, pc_low = to_f(prev_candle['High']), to_f(prev_candle['Low'])
-    pc_body = abs(pc_close - pc_open)
-
-    context_window = df.iloc[-52:-2]
-    recent_min, recent_max = to_f(context_window['Low'].min()), to_f(context_window['High'].max())
-
     levels_to_check = [
         (pools["PMH"], "Monthly Wall", "PMH", "bearish"), 
         (pools["PML"], "Monthly Wall", "PML", "bullish"),
@@ -428,63 +409,68 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
         is_perfect = pools.get(f"{code}_WALL")
         dist = abs(current_price - lv_val) / lv_val
         
-        # FASE 3: ENTRY (CRT Model #1) - RECLAIM (BLINDATA)
+        # 0. TRACE LOGGING
         if is_perfect:
-            setup = None
-            # RECLAIM BEARISH (SHORT): Sweep della High, Chiusura SOTTO, Candela ROSSA
-            if l_type == "bearish" and recent_max <= c_high and c_high > lv_val and c_close < lv_val:
-                if c_close < c_open: # Candela ROSSA
-                    # Rule: Previous candle must have small upper wick
-                    if pc_close > pc_open and pc_body > 0 and (pc_high - pc_close) <= (pc_body * 0.05):
-                        # Current sweep candle must close in the lower half
-                        if c_close <= (c_low + c_range * 0.5):
-                            setup = ("bearish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
-            
-            # RECLAIM BULLISH (LONG): Sweep della Low, Chiusura SOPRA, Candela VERDE
-            elif l_type == "bullish" and recent_min >= c_low and c_low < lv_val and c_close > lv_val:
-                if c_close > c_open: # Candela VERDE
-                    # Rule: Previous candle must have small lower wick
-                    if pc_close < pc_open and pc_body > 0 and (pc_close - pc_low) <= (pc_body * 0.05):
-                        # Current sweep candle must close in the upper half
-                        if c_close >= (c_high - c_range * 0.5):
-                            setup = ("bullish_tbs", f"{lv_name} No-Wick Sweep", "A+++", lv_val, code)
-            
-            if setup:
-                s_type, s_sub, d_score, lv, tier_code = setup
-                # Entry: Prezzo di chiusura del Reclaim (Chiamato "Blindato")
-                entry = c_close
-                # Stop Loss: 1 tick oltre lo sweep orario
-                tick = entry * 0.0001
-                sl = (c_high + tick) if l_type == "bearish" else (c_low - tick)
-                # Take Profit: Opposite Wick della candela HTF
-                wall_candle = pools.get(f"{tier_code}_CANDLE")
-                tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
-                
-                signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier_code, wall_candle)
-                
-                # Double Check: If current price is already too close to SL, skip it
-                risk = abs(entry - sl)
-                reward = abs(entry - tp)
-                if risk > 0 and (reward / risk) < 1.5:
-                     logger.warning(f"⚠️ {ticker}: Setup scartato per RR insufficiente ({round(reward/risk, 1)})")
-                     continue
+             logger.info(f"🔍 Checking {ticker} - Price: {current_price} vs {code}: {lv_val} (Wall: {is_perfect})")
 
-                # Monitor for double trigger
-                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
-                if existing_active.data: continue 
-
-                existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
-                if existing.data:
-                    supabase.table("crt_signals").update(signal).eq("id", existing.data[0]['id']).execute()
-                    logger.info(f"🚀 UPGRADED to ACTIVE (Confirmed): {ticker} [{tier_code}] @ {entry}")
-                else:
-                    supabase.table("crt_signals").insert(signal).execute()
-                    logger.info(f"🎯 NEW ENTRY (Confirmed): {ticker} [{tier_code}] @ {entry}")
-                return
-            return
-
-        # FASE 2: BREACHED (Sweep in corso)
+        # FASE 3: ENTRY (CRT Model #1) - RECLAIM (HISTORICAL SEARCH)
         if is_perfect:
+            # Look back 24 candles to find a Reclaim
+            lookback = min(24, len(df) - 1)
+            for i in range(1, lookback + 1):
+                c = df.iloc[-i]
+                c_open, c_close = to_f(c['Open']), to_f(c['Close'])
+                c_high, c_low = to_f(c['High']), to_f(c['Low'])
+                c_range = c_high - c_low
+                if c_range == 0: c_range = 0.001
+                
+                setup = None
+                # RECLAIM BEARISH (SHORT): Sweep della High, Chiusura SOTTO, Candela ROSSA
+                if l_type == "bearish" and c_high > lv_val and c_close < lv_val:
+                    if c_close < c_open: # Candela ROSSA
+                        # Simplified Rule: Just check if it closed in the lower half
+                        if c_close <= (c_low + c_range * 0.6): # Relaxed to 0.6
+                            setup = ("bearish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                
+                # RECLAIM BULLISH (LONG): Sweep della Low, Chiusura SOPRA, Candela VERDE
+                elif l_type == "bullish" and c_low < lv_val and c_close > lv_val:
+                    if c_close > c_open: # Candela VERDE
+                        # Simplified Rule: Just check if it closed in the upper half
+                        if c_close >= (c_high - c_range * 0.6): # Relaxed to 0.6
+                            setup = ("bullish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                
+                if setup:
+                    s_type, s_sub, d_score, lv, tier_code = setup
+                    entry = c_close
+                    tick = entry * 0.0001
+                    sl = (c_high + tick) if l_type == "bearish" else (c_low - tick)
+                    wall_candle = pools.get(f"{tier_code}_CANDLE")
+                    tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
+                    
+                    # Double Check: If current price is already past TP, skip
+                    if (l_type == "bearish" and current_price <= tp) or (l_type == "bullish" and current_price >= tp):
+                        continue
+
+                    # Monitor for duplicate trigger (Already active)
+                    existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
+                    if existing_active.data: break 
+
+                    # If everything is ok, create the signal
+                    signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier_code, wall_candle)
+                    
+                    existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
+                    if existing.data:
+                        supabase.table("crt_signals").update(signal).eq("id", existing.data[0]['id']).execute()
+                        logger.info(f"🚀 UPGRADED to ACTIVE (Confirmed): {ticker} [{tier_code}] @ {entry}")
+                    else:
+                        supabase.table("crt_signals").insert(signal).execute()
+                        logger.info(f"🎯 NEW ENTRY (Confirmed): {ticker} [{tier_code}] @ {entry}")
+                    return # Exit after finding the first valid reclaim in lookback
+
+        # FASE 2: BREACHED (Solo se non attivo)
+        if is_perfect:
+            current_low = to_f(df['Low'].iloc[-1])
+            current_high = to_f(df['High'].iloc[-1])
             is_breached = False
             if l_type == "bearish" and current_high > lv_val: is_breached = True
             elif l_type == "bullish" and current_low < lv_val: is_breached = True
@@ -531,7 +517,7 @@ def main():
         try:
             ticker_obj = yf.Ticker(t)
             mcap = ticker_obj.fast_info.get("marketCap", 0) if hasattr(ticker_obj, 'fast_info') else 0
-            return t if mcap >= 10_000_000_000 else None
+            return t if mcap >= 10_000_000 else None
         except: return None
 
     logger.info("Filtro Market Cap in corso...")
