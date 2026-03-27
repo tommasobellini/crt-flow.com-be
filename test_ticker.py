@@ -56,9 +56,9 @@ def test_ticker(ticker_symbol):
             low_wick_limit = w_body * 0.10
             opp_wick_req = w_body * 0.05
             
-            # SL LOGIC: 0.2% buffer
-            sl_bull = w_l * 0.998
-            sl_bear = w_h * 1.002
+            # DYNAMIC SL LOGIC: based on sweep candle wick (+/- 0.1% buffer)
+            sl_bull = w_l * 0.999
+            sl_bear = w_h * 1.001
             
             print(f"Body: {round(w_body, 2)}")
             print(f"Lower Wick: {round(lower_wick_abs, 2)} (Limit: < {round(low_wick_limit, 2)}) -> {'✅' if is_low_wick_ok else '❌'}")

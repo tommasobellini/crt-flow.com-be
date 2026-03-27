@@ -236,7 +236,7 @@ def validate_existing_signals(ticker, df, active_signals_map):
             created_at = pd.to_datetime(sig.get('created_at'))
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=pd.Timestamp.now(tz='UTC').tzinfo)
-            if (pd.Timestamp.now(tz='UTC') - created_at).total_seconds() < 300:
+            if (pd.Timestamp.now(tz='UTC') - created_at).total_seconds() < 600:
                 continue
         except: pass
 
@@ -425,41 +425,47 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
 
         # FASE 3: ENTRY (CRT Model #1) - RECLAIM (HISTORICAL SEARCH)
         if is_perfect:
-            # Look back 24 candles to find a Reclaim
+            # Look back 24 candles to find a Reclaim, but skip the current "live" candle (-1)
             lookback = min(24, len(df) - 1)
-            for i in range(1, lookback + 1):
+            for i in range(2, lookback + 1):
                 c = df.iloc[-i]
                 c_open, c_close = to_f(c['Open']), to_f(c['Close'])
                 c_high, c_low = to_f(c['High']), to_f(c['Low'])
-                c_range = c_high - c_low
-                if c_range == 0: c_range = 0.001
                 
                 setup = None
                 # RECLAIM BEARISH (SHORT): Sweep della High, Chiusura SOTTO, Candela ROSSA
                 if l_type == "bearish" and c_high > lv_val and c_close < lv_val:
-                    if c_close < c_open: # Candela ROSSA
-                        # Simplified Rule: Just check if it closed in the lower half
-                        if c_close <= (c_low + c_range * 0.6): # Relaxed to 0.6
-                            setup = ("bearish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                    if c_close < c_open: # MUST BE RED
+                        setup = ("bearish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
                 
                 # RECLAIM BULLISH (LONG): Sweep della Low, Chiusura SOPRA, Candela VERDE
                 elif l_type == "bullish" and c_low < lv_val and c_close > lv_val:
-                    if c_close > c_open: # Candela VERDE
-                        # Simplified Rule: Just check if it closed in the upper half
-                        if c_close >= (c_high - c_range * 0.6): # Relaxed to 0.6
-                            setup = ("bullish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                    if c_close > c_open: # MUST BE GREEN
+                        setup = ("bullish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
                 
                 if setup:
                     s_type, s_sub, d_score, lv, tier_code = setup
-                    entry = c_close
-                    # Relaxed Stop Loss: 0.2% margin instead of 0.01%
-                    sl = (c_high * 1.002) if l_type == "bearish" else (c_low * 0.998)
+                    
+                    # TIME ALIGNMENT: Proximity Filter (Chasing Prevention)
+                    # If price is already >1% away from the entry level, ignore the signal.
+                    if l_type == "bullish" and current_price > (lv_val * 1.01):
+                        logger.info(f"🚫 {ticker}: Price already >1% from Bullish entry ({lv_val}), ignoring.")
+                        continue
+                    if l_type == "bearish" and current_price < (lv_val * 0.99):
+                        logger.info(f"🚫 {ticker}: Price already >1% from Bearish entry ({lv_val}), ignoring.")
+                        continue
+
+                    entry = lv_val # Exact Institutional Level
+                    
+                    # DYNAMIC STOP LOSS: Base SL on the actual sweep candle wick (+/- 0.1% buffer)
+                    sl = (c_high * 1.001) if l_type == "bearish" else (c_low * 0.999)
+                    
                     wall_candle = pools.get(f"{tier_code}_CANDLE")
                     tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
                     
                     # Pre-creation SL Check: Prevent "suicide" trades
                     if (l_type == "bullish" and current_price <= sl) or (l_type == "bearish" and current_price >= sl):
-                        logger.warning(f"🚫 {ticker}: Rejected - Price already at/beyond Stop Loss.")
+                        logger.warning(f"🛑 {ticker}: Rejected - Price already at/beyond Stop Loss.")
                         continue
 
                     # Double Check: If current price is already past TP, skip
