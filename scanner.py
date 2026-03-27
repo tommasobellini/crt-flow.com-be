@@ -230,6 +230,16 @@ def validate_existing_signals(ticker, df, active_signals_map):
         s_type = sig.get('type', '')
         status = sig.get('status', 'active')
         
+        # Filter out new signals (Safe Zone / Breathing Room):
+        # Give the trade at least 5 minutes to "breathe" before monitoring exits.
+        try:
+            created_at = pd.to_datetime(sig.get('created_at'))
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=pd.Timestamp.now(tz='UTC').tzinfo)
+            if (pd.Timestamp.now(tz='UTC') - created_at).total_seconds() < 300:
+                continue
+        except: pass
+
         # Protezione d'urgenza: se SL o TP sono zero, non validiamo l'uscita
         if sl == 0 or tp == 0:
             if status != 'watchlist':
@@ -442,11 +452,16 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                 if setup:
                     s_type, s_sub, d_score, lv, tier_code = setup
                     entry = c_close
-                    tick = entry * 0.0001
-                    sl = (c_high + tick) if l_type == "bearish" else (c_low - tick)
+                    # Relaxed Stop Loss: 0.2% margin instead of 0.01%
+                    sl = (c_high * 1.002) if l_type == "bearish" else (c_low * 0.998)
                     wall_candle = pools.get(f"{tier_code}_CANDLE")
                     tp = wall_candle['l'] if l_type == "bearish" else wall_candle['h']
                     
+                    # Pre-creation SL Check: Prevent "suicide" trades
+                    if (l_type == "bullish" and current_price <= sl) or (l_type == "bearish" and current_price >= sl):
+                        logger.warning(f"🚫 {ticker}: Rejected - Price already at/beyond Stop Loss.")
+                        continue
+
                     # Double Check: If current price is already past TP, skip
                     if (l_type == "bearish" and current_price <= tp) or (l_type == "bullish" and current_price >= tp):
                         continue

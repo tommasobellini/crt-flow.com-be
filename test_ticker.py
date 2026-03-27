@@ -51,11 +51,14 @@ def test_ticker(ticker_symbol):
             upper_wick_abs = abs(w_h - max(w_o, w_c))
             
             # THE LOGIC (Relaxed per latest feedback)
+            # Wall side tolerance: 10% of body
+            # Opposite wick requirement: 5% of body
             low_wick_limit = w_body * 0.10
             opp_wick_req = w_body * 0.05
             
-            is_low_wick_ok = lower_wick_abs < low_wick_limit
-            is_opp_wick_ok = upper_wick_abs > opp_wick_req
+            # SL LOGIC: 0.2% buffer
+            sl_bull = w_l * 0.998
+            sl_bear = w_h * 1.002
             
             print(f"Body: {round(w_body, 2)}")
             print(f"Lower Wick: {round(lower_wick_abs, 2)} (Limit: < {round(low_wick_limit, 2)}) -> {'✅' if is_low_wick_ok else '❌'}")
