@@ -180,10 +180,9 @@ def run_accumulation_screener():
                 lower_wick_abs = abs(min(w_o, w_c) - w_l)
                 upper_wick_abs = abs(w_h - max(w_o, w_c))
                 
-                # RELAXED FILTERS (User Feedback):
-                # 1. No-Wick side: < 5% of body (was 1.5%)
-                # 2. Opposite side: > 15% of body (was 40%)
-                is_wall = bool((lower_wick_abs < w_body * 0.05) and (upper_wick_abs > w_body * 0.15))
+                # REQUISITI MURO ISTITUZIONALE (Color Confirmation):
+                # Bullish Wall (Support) must be a RED candle (Close < Open)
+                is_wall = bool((w_c < w_o) and (lower_wick_abs < w_body * 0.05) and (upper_wick_abs > w_body * 0.15))
                 
                 if ticker == os.getenv("DEBUG_TICKER"):
                     logger.info(f"DEBUG {ticker} {tf_name}: Body={round(w_body,2)}, LowWick={round(lower_wick_abs,2)}, Req=<{round(w_body*0.05,2)}")

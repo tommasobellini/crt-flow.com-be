@@ -165,10 +165,25 @@ def prefetch_all_htf_liquidity(tickers):
                 d_body = abs(d_close - d_open)
                 if d_body == 0: d_body = 0.001
                 
-                # PDH Perfect Wall: Green, Upper Wick < 10%, Lower Wick > 5%
-                pdh_wall = (d_close > d_open) and ((to_f(d_prev['High']) - d_close) < (d_body * 0.10)) and ((d_open - to_f(d_prev['Low'])) > (d_body * 0.05))
-                # PDL Perfect Wall: Red, Lower Wick < 10%, Upper Wick > 5%
-                pdl_wall = (d_close < d_open) and ((to_f(d_prev['Low']) - d_close) < (d_body * 0.10)) and ((to_f(d_prev['High']) - d_open) > (d_body * 0.05))
+                # --- WALL INTEGRITY LOGIC (Absolute Zero) ---
+                def calc_integrity(wick, body):
+                    if wick <= 0: return 100
+                    if wick < (body * 0.01): return 95
+                    if wick < (body * 0.02): return 85
+                    if wick < (body * 0.05): return 70
+                    return 0
+
+                # PDH Wall: Green, Upper Wick (Wall) < 1%, Lower Wick (Fuel) > 50%
+                pdh_wall_wick = pdh - d_close
+                pdh_fuel_wick = d_open - pdl
+                pdh_integrity = calc_integrity(pdh_wall_wick, d_body)
+                pdh_wall = (d_close > d_open) and (pdh_integrity >= 70) and (pdh_fuel_wick > (d_body * 0.50))
+                
+                # PDL Wall: Red, Lower Wick (Wall) < 1%, Upper Wick (Fuel) > 50%
+                pdl_wall_wick = d_close - pdl
+                pdl_fuel_wick = pdh - d_open
+                pdl_integrity = calc_integrity(pdl_wall_wick, d_body)
+                pdl_wall = (d_close < d_open) and (pdl_integrity >= 70) and (pdl_fuel_wick > (d_body * 0.50))
 
                 # --- LIVELLI WEEKLY ---
                 weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -177,18 +192,34 @@ def prefetch_all_htf_liquidity(tickers):
                 w_open, w_close = to_f(w_prev['Open']), to_f(w_prev['Close'])
                 w_body = abs(w_close - w_open)
                 if w_body == 0: w_body = 0.001
-                pwh_wall = (w_close > w_open) and ((to_f(w_prev['High']) - w_close) < (w_body * 0.10)) and ((w_open - to_f(w_prev['Low'])) > (w_body * 0.05))
-                pwl_wall = (w_close < w_open) and ((to_f(w_prev['Low']) - w_close) < (w_body * 0.10)) and ((to_f(w_prev['High']) - w_open) > (w_body * 0.05))
+                
+                pwh_wall_wick = pwh - w_close
+                pwh_fuel_wick = w_open - pwl
+                pwh_integrity = calc_integrity(pwh_wall_wick, w_body)
+                pwh_wall = (w_close > w_open) and (pwh_integrity >= 70) and (pwh_fuel_wick > (w_body * 0.50))
+
+                pwl_wall_wick = w_close - pwl
+                pwl_fuel_wick = pwh - w_open
+                pwl_integrity = calc_integrity(pwl_wall_wick, w_body)
+                pwl_wall = (w_close < w_open) and (pwl_integrity >= 70) and (pwl_fuel_wick > (w_body * 0.50))
 
                 # --- LIVELLI MONTHLY ---
-                monthly = df.resample('M').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
+                monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
                 m_prev = monthly.iloc[-2] if len(monthly) >= 2 else monthly.iloc[-1]
                 pmh, pml = to_f(m_prev['High']), to_f(m_prev['Low'])
                 m_open, m_close = to_f(m_prev['Open']), to_f(m_prev['Close'])
                 m_body = abs(m_close - m_open)
                 if m_body == 0: m_body = 0.001
-                pmh_wall = (m_close > m_open) and ((to_f(m_prev['High']) - m_close) < (m_body * 0.10)) and ((m_open - to_f(m_prev['Low'])) > (m_body * 0.05))
-                pml_wall = (m_close < m_open) and ((to_f(m_prev['Low']) - m_close) < (m_body * 0.10)) and ((to_f(m_prev['High']) - m_open) > (m_body * 0.05))
+                
+                pmh_wall_wick = pmh - m_close
+                pmh_fuel_wick = m_open - pml
+                pmh_integrity = calc_integrity(pmh_wall_wick, m_body)
+                pmh_wall = (m_close > m_open) and (pmh_integrity >= 70) and (pmh_fuel_wick > (m_body * 0.50))
+
+                pml_wall_wick = pml - m_close
+                pml_fuel_wick = pmh - m_open
+                pml_integrity = calc_integrity(pml_wall_wick, m_body)
+                pml_wall = (m_close < m_open) and (pml_integrity >= 70) and (pml_fuel_wick > (m_body * 0.50))
 
                 # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
@@ -196,12 +227,15 @@ def prefetch_all_htf_liquidity(tickers):
 
                 LIQUIDITY_CACHE[ticker] = {
                     "PDH": pdh, "PDL": pdl, "PDH_WALL": pdh_wall, "PDL_WALL": pdl_wall,
+                    "PDH_INTEGRITY": pdh_integrity, "PDL_INTEGRITY": pdl_integrity,
                     "PDH_CANDLE": {"t": str(d_prev.name), "o": d_open, "h": pdh, "l": pdl, "c": d_close},
                     "PDL_CANDLE": {"t": str(d_prev.name), "o": d_open, "h": pdh, "l": pdl, "c": d_close},
                     "PWH": pwh, "PWL": pwl, "PWH_WALL": pwh_wall, "PWL_WALL": pwl_wall,
+                    "PWH_INTEGRITY": pwh_integrity, "PWL_INTEGRITY": pwl_integrity,
                     "PWH_CANDLE": {"t": str(w_prev.name), "o": w_open, "h": pwh, "l": pwl, "c": w_close},
                     "PWL_CANDLE": {"t": str(w_prev.name), "o": w_open, "h": pwh, "l": pwl, "c": w_close},
                     "PMH": pmh, "PML": pml, "PMH_WALL": pmh_wall, "PML_WALL": pml_wall,
+                    "PMH_INTEGRITY": pmh_integrity, "PML_INTEGRITY": pml_integrity,
                     "PMH_CANDLE": {"t": str(m_prev.name), "o": m_open, "h": pmh, "l": pml, "c": m_close},
                     "PML_CANDLE": {"t": str(m_prev.name), "o": m_open, "h": pmh, "l": pml, "c": m_close},
                     "ADR_10": adr_10, "PDR": pdh - pdl
@@ -328,18 +362,24 @@ def validate_existing_signals(ticker, df, active_signals_map):
     return updates
 
 # --- 7. LOGICA PURE CRT MODEL #1 ---
-def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp, diamond_score, swept_level, wall_candle_data):
+def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp, diamond_score, swept_level, wall_candle_data, trigger_candle_data, wall_integrity=0):
     rr_ratio = 0
     if abs(entry - sl) > 0:
         rr_ratio = abs(entry - tp) / abs(entry - sl)
     
-    # Surgical metadata for chart highlighting
+    # Surgical metadata for chart highlighting (Enhanced for Visual Analysis Laboratory)
     trigger_metadata = {
-        "wall_candle_time": wall_candle_data.get('t'),
-        "wall_high": wall_candle_data.get('h'),
-        "wall_low": wall_candle_data.get('l'),
-        "opposite_wick_limit": tp,
-        "wall_coords": {
+        "wall_price": entry,
+        "swept_level": swept_level,
+        "wall_integrity": wall_integrity,
+        "sweep_wick": {
+            "time": trigger_candle_data.get('time'),
+            "low": trigger_candle_data.get('low'),
+            "high": trigger_candle_data.get('high')
+        },
+        "is_bullish_trigger": trigger_candle_data.get('is_bullish'),
+        "confirmation_time": trigger_candle_data.get('time'),
+        "wall_candle": {
             "time": wall_candle_data.get('t'),
             "open": wall_candle_data.get('o'),
             "high": wall_candle_data.get('h'),
@@ -361,7 +401,8 @@ def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp
         "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
         "rel_volume": 0, "volatility_warning": False, "is_golden_wick": False, "touches": 1,
         "market_bias": None, "max_favorable_excursion": 0.0, 
-        "trigger_candles": json.dumps(trigger_metadata) # Packing everything here for the chart
+        "trigger_candles": json.dumps(trigger_metadata),
+        "wall_integrity": wall_integrity
     }
 
 def create_watchlist_signal(ticker, tf, tier, level_val, dist, wall_candle=None):
@@ -394,7 +435,8 @@ def create_watchlist_signal(ticker, tf, tier, level_val, dist, wall_candle=None)
         "status": "watchlist", "is_active": True,
         "liquidity_tier": tier, "diamond_score": "PRE-ALERT",
         "confluence_level": f"Dist: {round(dist*100, 2)}%",
-        "trigger_candles": json.dumps(trigger_metadata)
+        "trigger_candles": json.dumps(trigger_metadata),
+        "wall_integrity": 0 
     }
 
 def update_signal_lifecycle(ticker, df, tf, htf_pools):
@@ -442,8 +484,25 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                 elif l_type == "bullish" and c_low < lv_val and c_close > lv_val:
                     if c_close > c_open: # MUST BE GREEN
                         setup = ("bullish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+
+                if not setup: continue
+
+                # --- DISPLACEMENT CHECK (Strong Expansion) ---
+                c_body = abs(c_close - c_open)
+                # Average body of the 10 candles PRIOR to the reclaim
+                prev_bodies = (df['Close'] - df['Open']).abs().iloc[max(0, -i-10):-i]
+                avg_body = prev_bodies.mean() if not prev_bodies.empty else 0.001
                 
-                if setup:
+                # Displacement: Body > 1.2x average + small opposite wick
+                has_displacement = c_body > (avg_body * 1.2)
+                if l_type == "bearish":
+                    # Short: Small upper wick (buyer exhaustion)
+                    has_displacement = has_displacement and (c_high - max(c_open, c_close) < c_body * 0.3)
+                else:
+                    # Long: Small lower wick (seller exhaustion)
+                    has_displacement = has_displacement and (min(c_open, c_close) - c_low < c_body * 0.3)
+
+                if has_displacement:
                     s_type, s_sub, d_score, lv, tier_code = setup
                     
                     # TIME ALIGNMENT: Proximity Filter (Chasing Prevention)
@@ -477,7 +536,14 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                     if existing_active.data: break 
 
                     # If everything is ok, create the signal
-                    signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier_code, wall_candle)
+                    trigger_data = {
+                        "time": c.name.timestamp(),
+                        "low": to_f(c['Low']),
+                        "high": to_f(c['High']),
+                        "is_bullish": to_f(c['Close']) > to_f(c['Open'])
+                    }
+                    integrity = pools.get(f"{tier_code}_INTEGRITY", 0)
+                    signal = create_pure_crt_signal(ticker, tf, s_type, s_sub, c_high, c_low, entry, sl, tp, d_score, tier_code, wall_candle, trigger_data, integrity)
                     
                     existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
                     if existing.data:
