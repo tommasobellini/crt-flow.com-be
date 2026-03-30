@@ -166,24 +166,21 @@ def prefetch_all_htf_liquidity(tickers):
                 if d_body == 0: d_body = 0.001
                 
                 # --- WALL INTEGRITY LOGIC (Absolute Zero) ---
-                def calc_integrity(wick, body):
-                    if wick <= 0: return 100
-                    if wick < (body * 0.01): return 95
-                    if wick < (body * 0.02): return 85
-                    if wick < (body * 0.05): return 70
+                def calc_integrity_score(wall_wick, body):
+                    if wall_wick <= body * 0.001: return 100
                     return 0
 
-                # PDH Wall: Green, Upper Wick (Wall) < 1%, Lower Wick (Fuel) > 50%
-                pdh_wall_wick = pdh - d_close
-                pdh_fuel_wick = d_open - pdl
-                pdh_integrity = calc_integrity(pdh_wall_wick, d_body)
-                pdh_wall = (d_close > d_open) and (pdh_integrity >= 70) and (pdh_fuel_wick > (d_body * 0.50))
+                # PDH Wall (Short): Red, Upper Wick (Wall) <= 0.1%, Lower Wick (Fuel) > 40%
+                pdh_wall_wick = pdh - d_open
+                pdh_fuel_wick = d_close - pdl
+                pdh_integrity = calc_integrity_score(pdh_wall_wick, d_body)
+                pdh_wall = (d_close < d_open) and (pdh_integrity == 100) and (pdh_fuel_wick > (d_body * 0.40))
                 
-                # PDL Wall: Red, Lower Wick (Wall) < 1%, Upper Wick (Fuel) > 50%
-                pdl_wall_wick = d_close - pdl
-                pdl_fuel_wick = pdh - d_open
-                pdl_integrity = calc_integrity(pdl_wall_wick, d_body)
-                pdl_wall = (d_close < d_open) and (pdl_integrity >= 70) and (pdl_fuel_wick > (d_body * 0.50))
+                # PDL Wall (Long): Green, Lower Wick (Wall) <= 0.1%, Upper Wick (Fuel) > 40%
+                pdl_wall_wick = d_open - pdl
+                pdl_fuel_wick = pdh - d_close
+                pdl_integrity = calc_integrity_score(pdl_wall_wick, d_body)
+                pdl_wall = (d_close > d_open) and (pdl_integrity == 100) and (pdl_fuel_wick > (d_body * 0.40))
 
                 # --- LIVELLI WEEKLY ---
                 weekly = df.resample('W').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -193,15 +190,15 @@ def prefetch_all_htf_liquidity(tickers):
                 w_body = abs(w_close - w_open)
                 if w_body == 0: w_body = 0.001
                 
-                pwh_wall_wick = pwh - w_close
-                pwh_fuel_wick = w_open - pwl
-                pwh_integrity = calc_integrity(pwh_wall_wick, w_body)
-                pwh_wall = (w_close > w_open) and (pwh_integrity >= 70) and (pwh_fuel_wick > (w_body * 0.50))
+                pwh_wall_wick = pwh - w_open
+                pwh_fuel_wick = w_close - pwl
+                pwh_integrity = calc_integrity_score(pwh_wall_wick, w_body)
+                pwh_wall = (w_close < w_open) and (pwh_integrity == 100) and (pwh_fuel_wick > (w_body * 0.40))
 
-                pwl_wall_wick = w_close - pwl
-                pwl_fuel_wick = pwh - w_open
-                pwl_integrity = calc_integrity(pwl_wall_wick, w_body)
-                pwl_wall = (w_close < w_open) and (pwl_integrity >= 70) and (pwl_fuel_wick > (w_body * 0.50))
+                pwl_wall_wick = w_open - pwl
+                pwl_fuel_wick = pwh - w_close
+                pwl_integrity = calc_integrity_score(pwl_wall_wick, w_body)
+                pwl_wall = (w_close > w_open) and (pwl_integrity == 100) and (pwl_fuel_wick > (w_body * 0.40))
 
                 # --- LIVELLI MONTHLY ---
                 monthly = df.resample('ME').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last'}).dropna()
@@ -211,15 +208,15 @@ def prefetch_all_htf_liquidity(tickers):
                 m_body = abs(m_close - m_open)
                 if m_body == 0: m_body = 0.001
                 
-                pmh_wall_wick = pmh - m_close
-                pmh_fuel_wick = m_open - pml
-                pmh_integrity = calc_integrity(pmh_wall_wick, m_body)
-                pmh_wall = (m_close > m_open) and (pmh_integrity >= 70) and (pmh_fuel_wick > (m_body * 0.50))
+                pmh_wall_wick = pmh - m_open
+                pmh_fuel_wick = m_close - pml
+                pmh_integrity = calc_integrity_score(pmh_wall_wick, m_body)
+                pmh_wall = (m_close < m_open) and (pmh_integrity == 100) and (pmh_fuel_wick > (m_body * 0.40))
 
-                pml_wall_wick = pml - m_close
-                pml_fuel_wick = pmh - m_open
-                pml_integrity = calc_integrity(pml_wall_wick, m_body)
-                pml_wall = (m_close < m_open) and (pml_integrity >= 70) and (pml_fuel_wick > (m_body * 0.50))
+                pml_wall_wick = m_open - pml
+                pml_fuel_wick = pmh - m_close
+                pml_integrity = calc_integrity_score(pml_wall_wick, m_body)
+                pml_wall = (m_close > m_open) and (pml_integrity == 100) and (pml_fuel_wick > (m_body * 0.40))
 
                 # ADR per filtro volatilità
                 last_10_days = df.iloc[-12:-2]
