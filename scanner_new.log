@@ -8804,3 +8804,71 @@ Caricati 0 segnali attivi.
 🔍 Checking GM - Price: 72.95500183105469 vs PML: 77.64615221119911 (Wall: True)
 ⚠️ GM BREACHED PML (Sweep in corso)
 ✅ Completato!
+🚀 Avvio scanner_new (Proactive Institutional Terminal)...
+Totale Ticker unici: 526
+Filtro Market Cap in corso...
+Ticker post M-Cap: 517
+Caricati 0 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 517 ticker...
+✅ HTF Walls e ADR calcolati per 517 ticker.
+=== Scansione 1H ===
+🔍 Checking FTNT - Price: 79.05999755859375 vs PDH: 79.69000244140625 (Wall: True)
+🎯 NEW ENTRY (Confirmed): FTNT [PDH] @ 79.69000244140625
+🔍 Checking CEG - Price: 298.57000732421875 vs PDL: 295.9100036621094 (Wall: True)
+🔍 Checking EXE - Price: 111.44999694824219 vs PDL: 111.38999938964844 (Wall: True)
+⚠️ EXE BREACHED PDL (Sweep in corso)
+🔍 Checking KDP - Price: 26.450000762939453 vs PWH: 26.704135510472863 (Wall: True)
+🔍 Checking VST - Price: 147.5500030517578 vs PDL: 151.75 (Wall: True)
+⚠️ VST BREACHED PDL (Sweep in corso)
+🔍 Checking ZBH - Price: 88.62000274658203 vs PDH: 89.19000244140625 (Wall: True)
+🎯 NEW ENTRY (Confirmed): ZBH [PDH] @ 89.19000244140625
+🔍 Checking NWS - Price: 28.329999923706055 vs PWH: 28.309999465942383 (Wall: True)
+⚠️ NWS BREACHED PWH (Sweep in corso)
+🔍 Checking VRSN - Price: 249.72000122070312 vs PDH: 249.61000061035156 (Wall: True)
+🎯 NEW ENTRY (Confirmed): VRSN [PDH] @ 249.61000061035156
+🔍 Checking MLM - Price: 573.3699951171875 vs PML: 646.286177040439 (Wall: True)
+⚠️ MLM BREACHED PML (Sweep in corso)
+🔍 Checking CTSH - Price: 61.060001373291016 vs PDH: 60.68000030517578 (Wall: True)
+⚠️ CTSH BREACHED PDH (Sweep in corso)
+🔍 Checking RMD - Price: 220.02999877929688 vs PDH: 222.50999450683594 (Wall: True)
+🔍 Checking TRGP - Price: 248.10000610351562 vs PDL: 247.64999389648438 (Wall: True)
+🎯 NEW ENTRY (Confirmed): TRGP [PDL] @ 247.64999389648438
+🔍 Checking NDSN - Price: 255.92999267578125 vs PML: 272.7115919654579 (Wall: True)
+⚠️ NDSN BREACHED PML (Sweep in corso)
+🔍 Checking CPAY - Price: 290.45001220703125 vs PDH: 290.6499938964844 (Wall: True)
+🎯 NEW ENTRY (Confirmed): CPAY [PDH] @ 290.6499938964844
+🔍 Checking DOV - Price: 202.83999633789062 vs PML: 201.03869930383067 (Wall: True)
+🔍 Checking COR - Price: 309.92999267578125 vs PDH: 317.82000732421875 (Wall: True)
+🔍 Checking FTV - Price: 53.625 vs PML: 52.6923379036058 (Wall: True)
+🔍 Checking PAYX - Price: 93.12000274658203 vs PDH: 93.25 (Wall: True)
+🎯 NEW ENTRY (Confirmed): PAYX [PDH] @ 93.25
+🔍 Checking CRL - Price: 159.72999572753906 vs PDH: 163.60000610351562 (Wall: True)
+✅ Completato!
+🚀 Avvio scanner_new (Proactive Institutional Terminal)...
+Totale Ticker unici: 526
+Filtro Market Cap in corso...
+Ticker post M-Cap: 517
+Caricati 12 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 517 ticker...
+✅ HTF Walls e ADR calcolati per 517 ticker.
+=== Scansione 1H ===
+🔍 Checking COR - Price: 309.92999267578125 vs PDH: 317.82000732421875 (Wall: True)
+🔍 Checking PAYX - Price: 93.12000274658203 vs PDH: 93.25 (Wall: True)
+🔍 Checking FTV - Price: 53.625 vs PML: 52.6923379036058 (Wall: True)
+🔍 Checking ZBH - Price: 88.62000274658203 vs PDH: 89.19000244140625 (Wall: True)
+🔍 Checking TRGP - Price: 248.10000610351562 vs PDL: 247.64999389648438 (Wall: True)
+🔍 Checking CEG - Price: 298.57000732421875 vs PDL: 295.9100036621094 (Wall: True)
+🔍 Checking VST - Price: 147.5500030517578 vs PDL: 151.75 (Wall: True)
+🔍 Checking FTNT - Price: 79.05999755859375 vs PDH: 79.69000244140625 (Wall: True)
+🔍 Checking CTSH - Price: 61.060001373291016 vs PDH: 60.68000030517578 (Wall: True)
+🔍 Checking KDP - Price: 26.450000762939453 vs PWH: 26.704135510472863 (Wall: True)
+🔍 Checking EXE - Price: 111.44999694824219 vs PDL: 111.38999938964844 (Wall: True)
+🔍 Checking NDSN - Price: 255.92999267578125 vs PML: 272.7115919654579 (Wall: True)
+🔍 Checking MLM - Price: 573.3699951171875 vs PML: 646.286177040439 (Wall: True)
+🔍 Checking CPAY - Price: 290.45001220703125 vs PDH: 290.6499938964844 (Wall: True)
+🔍 Checking NWS - Price: 28.329999923706055 vs PWH: 28.309999465942383 (Wall: True)
+🔍 Checking RMD - Price: 220.02999877929688 vs PDH: 222.50999450683594 (Wall: True)
+🔍 Checking DOV - Price: 202.83999633789062 vs PML: 201.03869930383067 (Wall: True)
+🔍 Checking VRSN - Price: 249.72000122070312 vs PDH: 249.61000061035156 (Wall: True)
+🔍 Checking CRL - Price: 159.72999572753906 vs PDH: 163.60000610351562 (Wall: True)
+✅ Completato!

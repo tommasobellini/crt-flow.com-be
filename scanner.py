@@ -104,6 +104,33 @@ def get_nasdaq100_tickers():
         logger.error(f"Errore NASDAQ: {e}")
         return []
 
+def get_russell2000_tickers():
+    try:
+        # URL del CSV ufficiale iShares per l'ETF IWM (Russell 2000)
+        url = "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund"
+        
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        # Leggiamo il CSV saltando le righe di intestazione di iShares (solitamente le prime 9)
+        df = pd.read_csv(io.StringIO(response.text), skiprows=9)
+        
+        # La colonna con i ticker si chiama solitamente 'Ticker'
+        if 'Ticker' in df.columns:
+            tickers = df['Ticker'].dropna().tolist()
+            # Pulizia: rimuovi ticker non validi (es. cash o valute) e formatta per Yahoo Finance
+            valid_tickers = [
+                str(t).replace('.', '-') 
+                for t in tickers 
+                if isinstance(t, str) and len(t) <= 6 and t.isalpha()
+            ]
+            return list(set(valid_tickers)) # Rimuove duplicati
+        return []
+    except Exception as e:
+        logger.error(f"Errore Russell 2000: {e}")
+        return []
+
 def get_forex_tickers():
     return ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X"]
 
@@ -586,22 +613,48 @@ def main():
     setup_logging()
     setup_supabase()
 
+    # --- CONFIGURAZIONE ARGOMENTI DA TERMINALE ---
+    parser = argparse.ArgumentParser(description="Scanner CRT Terminal")
+    parser.add_argument(
+        "--index", 
+        type=str, 
+        default="all", 
+        choices=["sp500", "nasdaq", "russell", "all"],
+        help="Scegli l'indice da scansionare: sp500, nasdaq, russell, o all (default)"
+    )
+    args = parser.parse_args()
+
     if sys.platform.startswith('win'):
         try:
             sys.stdout.reconfigure(encoding='utf-8')
         except: pass
 
-    logger.info("🚀 Avvio scanner_new (Proactive Institutional Terminal)...")
+    logger.info(f"🚀 Avvio scanner_new (Modalità: {args.index.upper()})...")
     
-    all_tickers = get_sp500_tickers() + get_nasdaq100_tickers() + get_forex_tickers() + get_crypto_tickers()
+    # --- LOGICA DI SELEZIONE TICKER ---
+    all_tickers = []
+    
+    if args.index in ["sp500", "all"]:
+        logger.info("📡 Caricamento S&P 500...")
+        all_tickers += get_sp500_tickers()
+        
+    if args.index in ["nasdaq", "all"]:
+        logger.info("📡 Caricamento NASDAQ 100...")
+        all_tickers += get_nasdaq100_tickers()
+        
+    if args.index in ["russell", "all"]:
+        logger.info("📡 Caricamento Russell 2000... (Potrebbe richiedere tempo)")
+        all_tickers += get_russell2000_tickers()
+
+    # Rimuovi duplicati e pulizia
     tickers = list(set(all_tickers))
-    logger.info(f"Totale Ticker unici: {len(tickers)}")
+    logger.info(f"✅ Totale Ticker unici da analizzare: {len(tickers)}")
 
     def check_mcap(t):
         try:
             ticker_obj = yf.Ticker(t)
             mcap = ticker_obj.fast_info.get("marketCap", 0) if hasattr(ticker_obj, 'fast_info') else 0
-            return t if mcap >= 10_000_000 else None
+            return t if mcap >= 3_000_000 else None
         except: return None
 
     logger.info("Filtro Market Cap in corso...")
