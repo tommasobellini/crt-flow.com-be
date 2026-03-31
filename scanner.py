@@ -499,15 +499,17 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                 c_high, c_low = to_f(c['High']), to_f(c['Low'])
                 
                 setup = None
+                d_score = "A+++" if "M" in code else ("A++" if "W" in code else "A+")
+                
                 # RECLAIM BEARISH (SHORT): Sweep della High, Chiusura SOTTO, Candela ROSSA
                 if l_type == "bearish" and c_high > lv_val and c_close < lv_val:
                     if c_close < c_open: # MUST BE RED
-                        setup = ("bearish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                        setup = ("bearish_tbs", f"{lv_name} Sweep", d_score, lv_val, code)
                 
                 # RECLAIM BULLISH (LONG): Sweep della Low, Chiusura SOPRA, Candela VERDE
                 elif l_type == "bullish" and c_low < lv_val and c_close > lv_val:
                     if c_close > c_open: # MUST BE GREEN
-                        setup = ("bullish_tbs", f"{lv_name} Sweep", "A+", lv_val, code)
+                        setup = ("bullish_tbs", f"{lv_name} Sweep", d_score, lv_val, code)
 
                 if not setup: continue
 
