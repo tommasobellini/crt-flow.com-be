@@ -9055,3 +9055,91 @@ Caricati 12 segnali attivi.
 🔍 Checking CBFV - Price: 35.400001525878906 vs PDL: 33.88999938964844 (Wall: True)
 🔍 Checking HLX - Price: 9.760000228881836 vs PML: 7.699999809265137 (Wall: True)
 ✅ Completato!
+🚀 Avvio scanner_new (Modalità: ALL)...
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000... (Potrebbe richiedere tempo)
+✅ Totale Ticker unici da analizzare: 2456
+Filtro Market Cap in corso...
+Ticker post M-Cap: 847
+Caricati 56 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 847 ticker...
+✅ HTF Walls e ADR calcolati per 847 ticker.
+=== Scansione 1H ===
+🔍 Checking HTFL - Price: 23.8799991607666 vs PDH: 25.5 (Wall: True)
+🔍 Checking AVPT - Price: 9.359999656677246 vs PDH: 9.609999656677246 (Wall: True)
+🚫 AVPT: Price already >1% from Bearish entry (9.609999656677246), ignoring.
+🔍 Checking MPTI - Price: 66.61000061035156 vs PDH: 72.13999938964844 (Wall: True)
+🔍 Checking SKIL - Price: 4.21999979019165 vs PDH: 4.099999904632568 (Wall: True)
+🔍 Checking CVGW - Price: 25.8700008392334 vs PDL: 26.079999923706055 (Wall: True)
+🎯 NEW ENTRY (Confirmed): CVGW [PDL] @ 26.079999923706055
+🔍 Checking BCBP - Price: 8.760000228881836 vs PWL: 8.300000190734863 (Wall: True)
+🔍 Checking GEF - Price: 66.41999816894531 vs PML: 69.84499854373024 (Wall: True)
+⚠️ GEF BREACHED PML (Sweep in corso)
+🔍 Checking CPAY - Price: 290.45001220703125 vs PDH: 290.6499938964844 (Wall: True)
+🔍 Checking MNTK - Price: 1.1799999475479126 vs PDH: 1.25 (Wall: True)
+🔍 Checking DOV - Price: 202.83999633789062 vs PML: 201.03869930383067 (Wall: True)
+🔍 Checking CABO - Price: 95.16999816894531 vs PML: 80.4000015258789 (Wall: True)
+🔍 Checking CENT - Price: 37.07500076293945 vs PWL: 35.72999954223633 (Wall: True)
+🔍 Checking FCBC - Price: 41.66999816894531 vs PML: 35.789476678413166 (Wall: True)
+🔍 Checking MLM - Price: 573.3699951171875 vs PML: 646.286177040439 (Wall: True)
+🔍 Checking DOUG - Price: 1.6200000047683716 vs PDH: 1.7100000381469727 (Wall: True)
+🔍 Checking SLVM - Price: 41.52000045776367 vs PDH: 40.380001068115234 (Wall: True)
+🔍 Checking CFBK - Price: 27.770000457763672 vs PML: 29.270000457763672 (Wall: True)
+🔍 Checking MH - Price: 13.25 vs PDH: 13.390000343322754 (Wall: True)
+🔍 Checking TCBI - Price: 92.70999908447266 vs PDH: 94.06999969482422 (Wall: True)
+🚫 TCBI: Price already >1% from Bearish entry (94.06999969482422), ignoring.
+🔍 Checking SPWR - Price: 1.215000033378601 vs PWL: 1.1699999570846558 (Wall: True)
+🔍 Checking OOMA - Price: 14.270000457763672 vs PWL: 13.6899995803833 (Wall: True)
+🔍 Checking GERN - Price: 1.4149999618530273 vs PML: 1.350000023841858 (Wall: True)
+🔍 Checking KW - Price: 10.975000381469727 vs PDL: 10.920000076293945 (Wall: True)
+🔍 Checking QTWO - Price: 46.58000183105469 vs PDH: 46.029998779296875 (Wall: True)
+⚠️ QTWO BREACHED PDH (Sweep in corso)
+🔍 Checking ATLO - Price: 27.764999389648438 vs PML: 25.963574682795514 (Wall: True)
+🔍 Checking ATLO - Price: 27.764999389648438 vs PWL: 27.25 (Wall: True)
+🔍 Checking VALU - Price: 36.0 vs PWH: 36.68000030517578 (Wall: True)
+🔍 Checking NWPX - Price: 76.0 vs PML: 67.43000030517578 (Wall: True)
+🔍 Checking NAT - Price: 5.71999979019165 vs PWL: 5.21999979019165 (Wall: True)
+🔍 Checking VSTM - Price: 4.835000038146973 vs PDH: 5.289999961853027 (Wall: True)
+🚫 VSTM: Price already >1% from Bearish entry (5.289999961853027), ignoring.
+🔍 Checking CHMG - Price: 56.0099983215332 vs PWL: 53.060001373291016 (Wall: True)
+🔍 Checking CBAN - Price: 19.520000457763672 vs PML: 19.387229035099764 (Wall: True)
+🔍 Checking ACNT - Price: 13.154999732971191 vs PML: 16.030000686645508 (Wall: True)
+⚠️ ACNT BREACHED PML (Sweep in corso)
+🔍 Checking SANM - Price: 124.05000305175781 vs PDL: 128.7100067138672 (Wall: True)
+⚠️ SANM BREACHED PDL (Sweep in corso)
+🔍 Checking OIS - Price: 11.579999923706055 vs PDL: 12.0 (Wall: True)
+🔍 Checking CTSH - Price: 61.060001373291016 vs PDH: 60.68000030517578 (Wall: True)
+🔍 Checking ACTG - Price: 4.829999923706055 vs PDH: 4.989999771118164 (Wall: True)
+🔍 Checking CMT - Price: 22.700000762939453 vs PWL: 20.3700008392334 (Wall: True)
+🔍 Checking LILA - Price: 8.5649995803833 vs PDL: 8.260000228881836 (Wall: True)
+🔍 Checking MLR - Price: 45.43000030517578 vs PML: 40.6047391952137 (Wall: True)
+🔍 Checking MLR - Price: 45.43000030517578 vs PWL: 44.099998474121094 (Wall: True)
+🔍 Checking ACU - Price: 43.939998626708984 vs PWL: 43.19416752410082 (Wall: True)
+🔍 Checking TTEC - Price: 2.315000057220459 vs PDH: 2.259999990463257 (Wall: True)
+⚠️ TTEC BREACHED PDH (Sweep in corso)
+🔍 Checking TALK - Price: 5.179999828338623 vs PDL: 5.139999866485596 (Wall: True)
+🔍 Checking FFAI - Price: 0.25200000405311584 vs PDH: 0.2549999952316284 (Wall: True)
+🔍 Checking ARDT - Price: 8.260000228881836 vs PML: 8.149999618530273 (Wall: True)
+🔍 Checking KMT - Price: 34.77000045776367 vs PWL: 34.5 (Wall: True)
+🔍 Checking BATRA - Price: 46.720001220703125 vs PDH: 46.619998931884766 (Wall: True)
+🔍 Checking ORN - Price: 10.649999618530273 vs PML: 12.15999984741211 (Wall: True)
+⚠️ ORN BREACHED PML (Sweep in corso)
+🔍 Checking WHG - Price: 16.520000457763672 vs PDH: 16.3799991607666 (Wall: True)
+⚠️ WHG BREACHED PDH (Sweep in corso)
+🔍 Checking CTS - Price: 46.65999984741211 vs PML: 51.19788027448773 (Wall: True)
+🔍 Checking FSBW - Price: 39.349998474121094 vs PDH: 38.529998779296875 (Wall: True)
+🔍 Checking NKSH - Price: 35.959999084472656 vs PML: 36.38999938964844 (Wall: True)
+🛑 NKSH: Rejected - Price already at/beyond Stop Loss.
+🔍 Checking VHI - Price: 14.050000190734863 vs PWL: 13.539999961853027 (Wall: True)
+🔍 Checking RES - Price: 7.159999847412109 vs PDL: 7.239999771118164 (Wall: True)
+🔍 Checking POWL - Price: 502.6199951171875 vs PDL: 524.3900146484375 (Wall: True)
+🔍 Checking WGS - Price: 59.56999969482422 vs PDH: 61.119998931884766 (Wall: True)
+🔍 Checking HLIO - Price: 62.72999954223633 vs PML: 64.27999877929688 (Wall: True)
+🔍 Checking COR - Price: 309.92999267578125 vs PDH: 317.82000732421875 (Wall: True)
+🔍 Checking HNVR - Price: 21.344999313354492 vs PDH: 21.290000915527344 (Wall: True)
+🔍 Checking KLTR - Price: 1.2050000429153442 vs PDH: 1.3200000524520874 (Wall: True)
+🔍 Checking PLPC - Price: 263.44000244140625 vs PWL: 268.0 (Wall: True)
+🔍 Checking PLPC - Price: 263.44000244140625 vs PDL: 270.80999755859375 (Wall: True)
+🔍 Checking ADCT - Price: 3.6500000953674316 vs PML: 3.5799999237060547 (Wall: True)
+✅ Completato!

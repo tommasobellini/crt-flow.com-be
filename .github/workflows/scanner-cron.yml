@@ -41,6 +41,6 @@ jobs:
             python dca_screener.py
           else
             echo "📊 Running Hourly Intraday Scanner & DCA Monitor..."
-            python scanner.py --all
+            python scanner.py
             python dca_notifier.py
           fi
