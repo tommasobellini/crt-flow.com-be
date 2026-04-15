@@ -58,6 +58,18 @@ def setup_supabase():
     return create_client(url, key)
 
 
+def log_run(supabase, payload: dict):
+    """
+    Insert one row into optimizer_runs.
+    Never raises — a logging failure must not crash the agent.
+    """
+    try:
+        supabase.table("optimizer_runs").insert(payload).execute()
+        print(f"[+] Run logged to Supabase (status={payload.get('status')}).")
+    except Exception as e:
+        print(f"[!] Could not log run to Supabase: {e}")
+
+
 def pull_losses(supabase) -> list:
     """Pull recent LOSS trades from crt_signals."""
     res = (
@@ -455,62 +467,138 @@ def main():
     print(f"  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print("="*60)
 
-    # ── 1. Pull losses from Supabase ──────────────────────────
-    analysis = {}
-    tickers_for_grid = args.tickers or []
+    # Shared Supabase client (reused for losses + final log_run)
+    supabase = None
 
-    if not args.tickers:
+    # Accumulate data for the final log row
+    run: dict = {
+        "dry_run":              args.dry_run,
+        "status":               "error",
+        "total_losses":         None,
+        "top_tickers":          None,
+        "exit_reasons":         None,
+        "avg_sl_distance_pct":  None,
+        "baseline_expectancy":  None,
+        "consensus_expectancy": None,
+        "improvement_pct":      None,
+        "gate_passed":          None,
+        "opencode_invoked":     False,
+        "params_changed":       None,
+        "git_commit_sha":       None,
+        "error_message":        None,
+    }
+
+    try:
+        # ── 1. Pull losses from Supabase ──────────────────────
+        analysis = {}
+        tickers_for_grid = args.tickers or []
+
         print("\n[*] Connecting to Supabase...")
         try:
             supabase = setup_supabase()
-            losses = pull_losses(supabase)
-            print(f"[+] Pulled {len(losses)} LOSS trades.")
-
-            if losses:
-                analysis = analyze_loss_patterns(losses)
-                print_analysis(analysis)
-                tickers_for_grid = analysis.get("top_loss_tickers", [])
-            else:
-                print("[!] No LOSS trades found in Supabase.")
         except Exception as e:
-            print(f"[!] Supabase error: {e}")
-            print("    Continuing without loss data...")
+            print(f"[!] Supabase connection failed: {e}")
+            supabase = None
 
-    # ── 2. Grid search ────────────────────────────────────────
-    best_params = None
-    data_cache  = {}
-    if not args.no_grid and tickers_for_grid:
-        mode = "full (6 params)" if args.full_grid else "fast (3 params: wall_wick, fuel_wick, displacement)"
-        print(f"\n[*] Running grid search [{mode}] on: {', '.join(tickers_for_grid)}")
-        best_params, data_cache = run_grid_search_on_tickers(tickers_for_grid, full_grid=args.full_grid)
-        if best_params:
-            print(f"\n[+] Consensus best params: {json.dumps(best_params, indent=2)}")
+        if not args.tickers and supabase:
+            try:
+                losses = pull_losses(supabase)
+                print(f"[+] Pulled {len(losses)} LOSS trades.")
+
+                if losses:
+                    analysis = analyze_loss_patterns(losses)
+                    print_analysis(analysis)
+                    tickers_for_grid = analysis.get("top_loss_tickers", [])
+
+                    run["total_losses"]        = analysis["total_losses"]
+                    run["top_tickers"]         = analysis["top_loss_tickers"]
+                    run["exit_reasons"]        = analysis["exit_reasons"]
+                    run["avg_sl_distance_pct"] = analysis["avg_sl_distance_pct"]
+                else:
+                    print("[!] No LOSS trades found in Supabase.")
+            except Exception as e:
+                print(f"[!] Supabase error: {e}")
+                print("    Continuing without loss data...")
+
+        # ── 2. Grid search ────────────────────────────────────
+        best_params = None
+        data_cache  = {}
+        if not args.no_grid and tickers_for_grid:
+            mode = "full (6 params)" if args.full_grid else "fast (3 params: wall_wick, fuel_wick, displacement)"
+            print(f"\n[*] Running grid search [{mode}] on: {', '.join(tickers_for_grid)}")
+            best_params, data_cache = run_grid_search_on_tickers(tickers_for_grid, full_grid=args.full_grid)
+            if best_params:
+                print(f"\n[+] Consensus best params: {json.dumps(best_params, indent=2)}")
+            else:
+                print("[!] Grid search returned no results.")
+        elif args.no_grid:
+            print("\n[*] Skipping grid search (--no-grid).")
         else:
-            print("[!] Grid search returned no results.")
-    elif args.no_grid:
-        print("\n[*] Skipping grid search (--no-grid).")
-    else:
-        print("\n[!] No tickers for grid search. Use --tickers or ensure Supabase has LOSS data.")
+            print("\n[!] No tickers for grid search. Use --tickers or ensure Supabase has LOSS data.")
 
-    # ── 3. Improvement gate ───────────────────────────────────
-    if best_params and data_cache and not args.dry_run:
-        should_proceed, avg_b, avg_c = validate_improvement(best_params, data_cache)
-        if not should_proceed:
-            print("\n[+] Optimizer Agent finished (no change applied).")
+        # ── 3. Improvement gate ───────────────────────────────
+        avg_b, avg_c = 0.0, 0.0
+        if best_params and data_cache and not args.dry_run:
+            should_proceed, avg_b, avg_c = validate_improvement(best_params, data_cache)
+            denom = abs(avg_b) if abs(avg_b) > 0.001 else 0.001
+            run["baseline_expectancy"]  = round(avg_b, 5)
+            run["consensus_expectancy"] = round(avg_c, 5)
+            run["improvement_pct"]      = round((avg_c - avg_b) / denom * 100, 2)
+            run["gate_passed"]          = should_proceed
+
+            if not should_proceed:
+                run["status"] = "no_improvement"
+                print("\n[+] Optimizer Agent finished (no change applied).")
+                return
+
+        # ── 4. Build prompt ───────────────────────────────────
+        if not analysis and not best_params:
+            run["status"] = "no_data"
+            print("\n[!] Nothing to optimize. Exiting.")
             return
 
-    # ── 4. Build prompt ───────────────────────────────────────
-    if not analysis and not best_params:
-        print("\n[!] Nothing to optimize. Exiting.")
-        return
+        prompt = build_opencode_prompt(analysis, best_params)
 
-    prompt = build_opencode_prompt(analysis, best_params)
+        # ── 5. Build params_changed diff ─────────────────────
+        if best_params:
+            defaults = ScannerParams()
+            params_changed = {}
+            for k in PARAM_GRID:
+                old_val = getattr(defaults, k)
+                new_val = best_params.get(k, old_val)
+                if new_val != old_val:
+                    params_changed[k] = {"from": old_val, "to": new_val}
+            run["params_changed"] = params_changed or None
 
-    # ── 5. Git snapshot + Invoke OpenCode ─────────────────────
-    if not args.dry_run and best_params:
-        git_snapshot()
+        # ── 6. Git snapshot ───────────────────────────────────
+        if not args.dry_run and best_params:
+            snapshot_created = git_snapshot()
+            # Capture the SHA of the snapshot commit
+            if snapshot_created:
+                try:
+                    sha_result = subprocess.run(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        cwd=REPO_ROOT, capture_output=True, text=True,
+                    )
+                    run["git_commit_sha"] = sha_result.stdout.strip() or None
+                except Exception:
+                    pass
 
-    invoke_opencode(prompt, dry_run=args.dry_run)
+        # ── 7. Invoke OpenCode ────────────────────────────────
+        invoke_opencode(prompt, dry_run=args.dry_run)
+        run["opencode_invoked"] = not args.dry_run
+        run["status"] = "completed"
+
+    except Exception as e:
+        run["status"] = "error"
+        run["error_message"] = str(e)
+        print(f"\n[!] Unexpected error: {e}")
+        raise
+
+    finally:
+        # ── 8. Log to Supabase (always, even on error) ────────
+        if supabase:
+            log_run(supabase, run)
 
     print("\n[+] Optimizer Agent finished.")
 

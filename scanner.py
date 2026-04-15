@@ -270,6 +270,26 @@ def prefetch_all_htf_liquidity(tickers):
         logger.error(f"Errore prefetch HTF: {e}")
 
 # --- 6. AGGIORNAMENTO SEGNALI ATTIVI (Monitoring & Autopsy) ---
+# Solo reclaim recenti (candele chiuse); break strutturale deve precedere il reclaim nel tempo.
+CRT_RECLAIM_MAX_AGE = 8
+CRT_BREAK_SEARCH_BARS = 36
+
+def _had_structural_break_before_reclaim(df, reclaim_idx_from_end, lv_val, l_type, max_j):
+    """reclaim_idx_from_end = i dove la reclaim è df.iloc[-i]. Cerca j>i (più indietro nel tempo) con chiusura oltre il wall."""
+    n = len(df)
+    if reclaim_idx_from_end >= n: return False
+    hi = min(max_j, n - 1)
+    for j in range(reclaim_idx_from_end + 1, hi + 1):
+        if j >= n: break
+        row = df.iloc[-j]
+        _, c = to_f(row['Open']), to_f(row['Close'])
+        h, low = to_f(row['High']), to_f(row['Low'])
+        if l_type == "bearish":
+            if c > lv_val and h > lv_val: return True
+        else:
+            if c < lv_val and low < lv_val: return True
+    return False
+
 def validate_existing_signals(ticker, df, active_signals_map):
     updates = []
     if ticker not in active_signals_map: return updates
@@ -282,6 +302,14 @@ def validate_existing_signals(ticker, df, active_signals_map):
     curr_open = to_f(curr_candle['Open'])
 
     for sig in signals:
+        try:
+            signal_time = str(sig.get('created_at', ''))[:13]
+            candle_time = curr_candle.name.strftime('%Y-%m-%dT%H')
+            if signal_time == candle_time:
+                continue
+        except Exception:
+            pass
+
         sl = to_f(sig.get('stop_loss', 0))
         tp = to_f(sig.get('take_profit', 0))
         entry = to_f(sig.get('entry_price', sig.get('price')))
@@ -394,6 +422,7 @@ def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp
     # Surgical metadata for chart highlighting (Enhanced for Visual Analysis Laboratory)
     trigger_metadata = {
         "wall_price": entry,
+        "htf_wall_level": entry,
         "swept_level": swept_level,
         "wall_integrity": wall_integrity,
         "sweep_wick": {
@@ -416,10 +445,10 @@ def create_pure_crt_signal(ticker, tf, s_type, subtype, high, low, entry, sl, tp
         "symbol": ticker, "timeframe": tf, "type": s_type, "subtype": subtype,
         "range_high": round(high, 2), "range_low": round(low, 2),
         "price": round(entry, 2), "entry_price": round(entry, 2),
-        "status": "active", "is_active": True, "result": None,
+        "status": "pending", "is_active": True, "result": None,
         "stop_loss": round(sl, 2), "take_profit": round(tp, 2),
         "rr_ratio": round(rr_ratio, 1),
-        "liquidity_tier": f"{swept_level} Sweep", "session_tag": "Market Order",
+        "liquidity_tier": f"{swept_level} Sweep", "session_tag": "CRT TBS Limit",
         "diamond_score": diamond_score, "confluence_level": "CRT Model #1",
         "has_divergence": False, "seasonality_score": 0, "seasonality_data": "{}",
         "fvg_detected": False, "hitting_fvg": False, "smt_divergence": False, "adr_percent": 0,
@@ -489,11 +518,42 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
         if is_perfect:
              logger.info(f"🔍 Checking {ticker} - Price: {current_price} vs {code}: {lv_val} (Wall: {is_perfect})")
 
-        # FASE 3: ENTRY (CRT Model #1) - RECLAIM (HISTORICAL SEARCH)
+        open_crt = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["active", "pending"]).execute()
+
+        # FASE 1: WATCHLIST (Prossimità)
+        if dist <= 0.005 and is_perfect:
+            existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).execute()
+            if not existing.data:
+                watchlist_sig = create_watchlist_signal(ticker, tf, code, lv_val, dist, pools.get(f"{code}_CANDLE"))
+                supabase.table("crt_signals").insert(watchlist_sig).execute()
+                logger.info(f"👀 {ticker} added to WATCHLIST ({code})")
+
+        # FASE 2: BREACHED (nessun CRT aperto o in attesa)
         if is_perfect:
-            # Look back 24 candles to find a Reclaim, but skip the current "live" candle (-1)
-            lookback = min(24, len(df) - 1)
-            for i in range(2, lookback + 1):
+            current_low = to_f(df['Low'].iloc[-1])
+            current_high = to_f(df['High'].iloc[-1])
+            is_breached = False
+            if l_type == "bearish" and current_high > lv_val: is_breached = True
+            elif l_type == "bullish" and current_low < lv_val: is_breached = True
+            
+            if is_breached:
+                if open_crt.data: continue
+
+                existing = supabase.table("crt_signals").select("id", "status").eq("symbol", ticker).eq("is_active", True).execute()
+                if not existing.data or existing.data[0]['status'] == 'watchlist':
+                    if not existing.data:
+                        sig = create_watchlist_signal(ticker, tf, code, lv_val, 0, pools.get(f"{code}_CANDLE"))
+                        sig["status"] = "breached"
+                        supabase.table("crt_signals").insert(sig).execute()
+                    else:
+                        supabase.table("crt_signals").update({"status": "breached", "subtype": f"RECLAIMING {code}"}).eq("id", existing.data[0]['id']).execute()
+                    logger.info(f"⚠️ {ticker} BREACHED {code} (Sweep in corso)")
+
+        # FASE 3: ENTRY (CRT Model #1) — reclaim recente dopo break strutturale
+        if is_perfect:
+            # Reclaim solo sulle ultime candele 1H chiuse (esclusa la live -1)
+            max_i = min(CRT_RECLAIM_MAX_AGE, len(df) - 1)
+            for i in range(2, max_i + 1):
                 c = df.iloc[-i]
                 c_open, c_close = to_f(c['Open']), to_f(c['Close'])
                 c_high, c_low = to_f(c['High']), to_f(c['Low'])
@@ -513,10 +573,13 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
 
                 if not setup: continue
 
+                if not _had_structural_break_before_reclaim(df, i, lv_val, l_type, i + CRT_BREAK_SEARCH_BARS):
+                    continue
+
                 # --- DISPLACEMENT CHECK (Strong Expansion) ---
                 c_body = abs(c_close - c_open)
-                # Average body of the 10 candles PRIOR to the reclaim
-                prev_bodies = (df['Close'] - df['Open']).abs().iloc[max(0, -i-10):-i]
+                reclaim_pos = len(df) - i
+                prev_bodies = (df['Close'] - df['Open']).abs().iloc[max(0, reclaim_pos - 10):reclaim_pos]
                 avg_body = prev_bodies.mean() if not prev_bodies.empty else 0.001
                 
                 # Displacement: Body > 1.2x average + small opposite wick
@@ -557,9 +620,7 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                     if (l_type == "bearish" and current_price <= tp) or (l_type == "bullish" and current_price >= tp):
                         continue
 
-                    # Monitor for duplicate trigger (Already active)
-                    existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
-                    if existing_active.data: break 
+                    if open_crt.data: break
 
                     # If everything is ok, create the signal
                     trigger_data = {
@@ -574,42 +635,11 @@ def update_signal_lifecycle(ticker, df, tf, htf_pools):
                     existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).in_("status", ["watchlist", "breached"]).execute()
                     if existing.data:
                         supabase.table("crt_signals").update(signal).eq("id", existing.data[0]['id']).execute()
-                        logger.info(f"🚀 UPGRADED to ACTIVE (Confirmed): {ticker} [{tier_code}] @ {entry}")
+                        logger.info(f"🚀 UPGRADED to PENDING (CRT TBS): {ticker} [{tier_code}] limit @ {entry}")
                     else:
                         supabase.table("crt_signals").insert(signal).execute()
-                        logger.info(f"🎯 NEW ENTRY (Confirmed): {ticker} [{tier_code}] @ {entry}")
+                        logger.info(f"🎯 NEW PENDING (CRT TBS): {ticker} [{tier_code}] limit @ {entry}")
                     return # Exit after finding the first valid reclaim in lookback
-
-        # FASE 2: BREACHED (Solo se non attivo)
-        if is_perfect:
-            current_low = to_f(df['Low'].iloc[-1])
-            current_high = to_f(df['High'].iloc[-1])
-            is_breached = False
-            if l_type == "bearish" and current_high > lv_val: is_breached = True
-            elif l_type == "bullish" and current_low < lv_val: is_breached = True
-            
-            if is_breached:
-                existing_active = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("status", "active").eq("is_active", True).execute()
-                if existing_active.data: continue
-
-                existing = supabase.table("crt_signals").select("id", "status").eq("symbol", ticker).eq("is_active", True).execute()
-                if not existing.data or existing.data[0]['status'] == 'watchlist':
-                    if not existing.data:
-                        sig = create_watchlist_signal(ticker, tf, code, lv_val, 0, pools.get(f"{code}_CANDLE"))
-                        sig["status"] = "breached"
-                        supabase.table("crt_signals").insert(sig).execute()
-                    else:
-                        supabase.table("crt_signals").update({"status": "breached", "subtype": f"RECLAIMING {code}"}).eq("id", existing.data[0]['id']).execute()
-                    logger.info(f"⚠️ {ticker} BREACHED {code} (Sweep in corso)")
-                continue
-
-        # FASE 1: WATCHLIST (Prossimità)
-        if dist <= 0.005 and is_perfect:
-            existing = supabase.table("crt_signals").select("id").eq("symbol", ticker).eq("is_active", True).execute()
-            if not existing.data:
-                watchlist_sig = create_watchlist_signal(ticker, tf, code, lv_val, dist, pools.get(f"{code}_CANDLE"))
-                supabase.table("crt_signals").insert(watchlist_sig).execute()
-                logger.info(f"👀 {ticker} added to WATCHLIST ({code})")
 
 def main():
     setup_logging()

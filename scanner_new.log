@@ -9386,3 +9386,100 @@ Caricati 64 segnali attivi.
 🔍 Checking AIRS - Price: 2.825000047683716 vs PDH: 3.009999990463257 (Wall: True)
 🚫 AIRS: Price already >1% from Bearish entry (3.009999990463257), ignoring.
 ✅ Completato!
+🚀 Avvio scanner_new (Modalità: SP500)...
+📡 Caricamento S&P 500...
+✅ Totale Ticker unici da analizzare: 503
+Filtro Market Cap in corso...
+Ticker post M-Cap: 503
+Caricati 356 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 503 ticker...
+✅ HTF Walls e ADR calcolati per 503 ticker.
+=== Scansione 1H ===
+🔍 Checking ZTS - Price: 121.11499786376953 vs PMH: 130.0500030517578 (Wall: True)
+🔍 Checking ES - Price: 68.94000244140625 vs PMH: 75.41268462561433 (Wall: True)
+🔍 Checking CPT - Price: 101.62999725341797 vs PDH: 101.62000274658203 (Wall: True)
+🔍 Checking RSG - Price: 210.02999877929688 vs PDH: 215.27000427246094 (Wall: True)
+🔍 Checking OTIS - Price: 81.87000274658203 vs PWL: 77.25 (Wall: True)
+🔍 Checking WYNN - Price: 105.22000122070312 vs PDH: 103.7699966430664 (Wall: True)
+🔍 Checking VST - Price: 163.82000732421875 vs PDL: 152.64999389648438 (Wall: True)
+🔍 Checking DIS - Price: 102.95999908447266 vs PMH: 104.61000061035156 (Wall: True)
+🔍 Checking NWS - Price: 28.889999389648438 vs PWL: 27.940000534057617 (Wall: True)
+🔍 Checking ATO - Price: 187.64999389648438 vs PDH: 190.25999450683594 (Wall: True)
+🔍 Checking VZ - Price: 45.19499969482422 vs PDH: 46.09000015258789 (Wall: True)
+🔍 Checking TAP - Price: 43.97999954223633 vs PDH: 45.0 (Wall: True)
+🔍 Checking FE - Price: 51.095001220703125 vs PDH: 51.5099983215332 (Wall: True)
+🔍 Checking FCX - Price: 68.80000305175781 vs PDL: 66.8499984741211 (Wall: True)
+🔍 Checking DVA - Price: 149.27999877929688 vs PWL: 144.75999450683594 (Wall: True)
+🔍 Checking CPB - Price: 20.094999313354492 vs PDH: 20.440000534057617 (Wall: True)
+🔍 Checking CASY - Price: 740.75 vs PDH: 737.2899780273438 (Wall: True)
+🔍 Checking AIG - Price: 77.91000366210938 vs PWL: 75.26000213623047 (Wall: True)
+🔍 Checking ETR - Price: 115.78990173339844 vs PDH: 116.45999908447266 (Wall: True)
+🔍 Checking BKNG - Price: 180.72999572753906 vs PWL: 166.25 (Wall: True)
+🔍 Checking TMUS - Price: 189.5 vs PDH: 195.9199981689453 (Wall: True)
+🔍 Checking YUM - Price: 161.77999877929688 vs PDH: 161.77000427246094 (Wall: True)
+🔍 Checking DTE - Price: 147.79249572753906 vs PDH: 149.50999450683594 (Wall: True)
+🔍 Checking GL - Price: 149.3300018310547 vs PWL: 141.8699951171875 (Wall: True)
+🔍 Checking REG - Price: 79.33999633789062 vs PDH: 78.38999938964844 (Wall: True)
+🔍 Checking WEC - Price: 116.55000305175781 vs PDH: 117.33000183105469 (Wall: True)
+🔍 Checking KDP - Price: 26.104999542236328 vs PDH: 26.530000686645508 (Wall: True)
+🔍 Checking TSN - Price: 65.29000091552734 vs PDH: 65.62000274658203 (Wall: True)
+✅ Completato!
+🚀 Avvio scanner_new (Modalità: SP500)...
+📡 Caricamento S&P 500...
+✅ Totale Ticker unici da analizzare: 503
+Filtro Market Cap in corso...
+Ticker post M-Cap: 503
+Caricati 0 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 503 ticker...
+🚀 Avvio scanner_new (Modalità: NASDAQ)...
+📡 Caricamento NASDAQ 100...
+✅ Totale Ticker unici da analizzare: 101
+Filtro Market Cap in corso...
+Ticker post M-Cap: 101
+Caricati 0 segnali attivi.
+🌊 Analisi HTF Walls (D/W/M) per 101 ticker...
+✅ HTF Walls e ADR calcolati per 503 ticker.
+✅ HTF Walls e ADR calcolati per 101 ticker.
+=== Scansione 1H ===
+=== Scansione 1H ===
+🔍 Checking TMUS - Price: 190.08999633789062 vs PDH: 195.9199981689453 (Wall: True)
+🔍 Checking KDP - Price: 26.03499984741211 vs PDH: 26.530000686645508 (Wall: True)
+🔍 Checking DVA - Price: 149.3000030517578 vs PWL: 144.75999450683594 (Wall: True)
+🔍 Checking ATO - Price: 188.22999572753906 vs PDH: 190.25999450683594 (Wall: True)
+🔍 Checking BKNG - Price: 180.8000030517578 vs PWL: 166.25 (Wall: True)
+✅ Completato!
+🔍 Checking TSN - Price: 65.0199966430664 vs PDH: 65.62000274658203 (Wall: True)
+🔍 Checking RSG - Price: 211.43499755859375 vs PDH: 215.27000427246094 (Wall: True)
+🔍 Checking REG - Price: 79.62999725341797 vs PDH: 78.38999938964844 (Wall: True)
+⚠️ REG BREACHED PDH (Sweep in corso)
+🔍 Checking VST - Price: 163.92999267578125 vs PDL: 152.64999389648438 (Wall: True)
+🔍 Checking YUM - Price: 161.57000732421875 vs PDH: 161.77000427246094 (Wall: True)
+👀 YUM added to WATCHLIST (PDH)
+⚠️ YUM BREACHED PDH (Sweep in corso)
+🔍 Checking DIS - Price: 102.75 vs PMH: 104.61000061035156 (Wall: True)
+🔍 Checking CPB - Price: 20.059999465942383 vs PDH: 20.440000534057617 (Wall: True)
+🔍 Checking TAP - Price: 43.73500061035156 vs PDH: 45.0 (Wall: True)
+🔍 Checking WYNN - Price: 105.48500061035156 vs PDH: 103.7699966430664 (Wall: True)
+⚠️ WYNN BREACHED PDH (Sweep in corso)
+🔍 Checking WEC - Price: 116.56999969482422 vs PDH: 117.33000183105469 (Wall: True)
+🔍 Checking FE - Price: 51.22999954223633 vs PDH: 51.5099983215332 (Wall: True)
+🔍 Checking ETR - Price: 115.78500366210938 vs PDH: 116.45999908447266 (Wall: True)
+🔍 Checking VZ - Price: 45.345001220703125 vs PDH: 46.09000015258789 (Wall: True)
+🔍 Checking CPT - Price: 101.74500274658203 vs PDH: 101.62000274658203 (Wall: True)
+👀 CPT added to WATCHLIST (PDH)
+⚠️ CPT BREACHED PDH (Sweep in corso)
+🚀 UPGRADED to PENDING (CRT TBS): CPT [PDH] limit @ 101.62000274658203
+🔍 Checking GL - Price: 148.66000366210938 vs PWL: 141.8699951171875 (Wall: True)
+🔍 Checking BKNG - Price: 180.8000030517578 vs PWL: 166.25 (Wall: True)
+🔍 Checking CASY - Price: 742.5750122070312 vs PDH: 737.2899780273438 (Wall: True)
+⚠️ CASY BREACHED PDH (Sweep in corso)
+🔍 Checking ES - Price: 69.13999938964844 vs PMH: 75.41268462561433 (Wall: True)
+🔍 Checking OTIS - Price: 81.97000122070312 vs PWL: 77.25 (Wall: True)
+🔍 Checking TMUS - Price: 190.08999633789062 vs PDH: 195.9199981689453 (Wall: True)
+🔍 Checking NWS - Price: 28.889999389648438 vs PWL: 27.940000534057617 (Wall: True)
+🔍 Checking FCX - Price: 68.49500274658203 vs PDL: 66.8499984741211 (Wall: True)
+🔍 Checking ZTS - Price: 121.26499938964844 vs PMH: 130.0500030517578 (Wall: True)
+🔍 Checking AIG - Price: 77.12000274658203 vs PWL: 75.26000213623047 (Wall: True)
+🔍 Checking DTE - Price: 148.28500366210938 vs PDH: 149.50999450683594 (Wall: True)
+🔍 Checking KDP - Price: 26.03499984741211 vs PDH: 26.530000686645508 (Wall: True)
+✅ Completato!
