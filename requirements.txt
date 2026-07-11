@@ -76,3 +76,4 @@ urllib3==2.6.3
 websockets==15.0.1
 yarl==1.22.0
 yfinance==1.0
+pytest==8.3.4

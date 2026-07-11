@@ -9483,3 +9483,194 @@ Caricati 0 segnali attivi.
 🔍 Checking DTE - Price: 148.28500366210938 vs PDH: 149.50999450683594 (Wall: True)
 🔍 Checking KDP - Price: 26.03499984741211 vs PDH: 26.530000686645508 (Wall: True)
 ✅ Completato!
+🚀 MTF Golden Zone Scanner (DRY-RUN)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+Errore Russell 2000: Error tokenizing data. C error: Expected 1 fields in line 16, saw 4
+
+✅ Ticker unici: 517
+Filtro Market Cap in corso...
+Ticker post M-Cap: 517
+Errore VMC: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore GOOG: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore SBUX: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore MDLZ: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore APO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore SOLV: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore AVGO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore VTR: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore APTV: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore UPS: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore WMB: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CMG: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ADM: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore TFC: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CSCO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore NUE: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ABT: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore DVA: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore PGR: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore IRM: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ABBV: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore HSY: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore MSTR: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore SMCI: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore DIS: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CL: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ITW: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CASY: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore AMAT: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore AKAM: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore Q: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore MCK: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore COIN: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CLX: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore NSC: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore LITE: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore BLDR: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ACGL: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore VICI: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore WFC: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore COO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore AZO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore FOX: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore TGT: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore LRCX: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ROP: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore AFL: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore WEC: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore TTD: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore FANG: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore NEM: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore JBHT: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore EL: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore NVR: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore FDXF: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore FER: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore VLO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore LNT: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore BSX: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore CBOE: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore SNDK: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore VRSK: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ATO: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore ISRG: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+Errore PH: "Column(s) ['Close', 'High', 'Low', 'Open'] do not exist"
+🚀 MTF Golden Zone Scanner (DRY-RUN)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+Errore Russell 2000: Error tokenizing data. C error: Expected 1 fields in line 16, saw 4
+
+✅ Ticker unici: 517
+Filtro Market Cap in corso...
+Ticker post M-Cap: 517
+✅ Completato. Segnali trovati: 0
+🚀 MTF Engulfing Scanner (DRY-RUN)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+   S&P 500: 503 ticker
+   NASDAQ 100: 101 ticker
+✅ Ticker unici: 517 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 517
+✅ Completato. Segnali trovati: 0
+🚀 MTF Engulfing Scanner (DRY-RUN)
+🎯 SIGNAL T: {"ticker": "T", "signal_type": "LONG", "4h_engulfing": "Detected (Bullish)", "1h_engulfing": "Aligned (Bullish)", "ltf_trigger": "Triggered on 5m", "timestamp": "2026-07-02T15:55:00-04:00"}
+Pipeline: no_data=0 | no_4h=0 | no_1h=0 | no_5m=0 | signals=1
+✅ Completato. Segnali trovati: 1
+🚀 HA+RSI MTF Scanner (DRY-RUN)
+🎯 SIGNAL NVDA: {"ticker": "NVDA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.8, "1h_rsi": 77.0, "15m_rsi": 71.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+Pipeline: no_data=0 | no_4h=0 | no_1h=0 | signals=1 | golden=0
+✅ Completato. Segnali trovati: 1 (golden: 0)
+🚀 HA+RSI MTF Scanner (DRY-RUN)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+✅ Ticker unici: 503 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 503
+🎯 SIGNAL DXCM: {"ticker": "DXCM", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.8, "1h_rsi": 67.1, "15m_rsi": 68.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL BLK: {"ticker": "BLK", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.9, "1h_rsi": 72.5, "15m_rsi": 62.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL APD: {"ticker": "APD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.1, "1h_rsi": 51.5, "15m_rsi": 62.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL RF: {"ticker": "RF", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 65.5, "1h_rsi": 68.4, "15m_rsi": 61.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NVDA: {"ticker": "NVDA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.8, "1h_rsi": 77.0, "15m_rsi": 71.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MDT: {"ticker": "MDT", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 60.3, "1h_rsi": 65.2, "15m_rsi": 68.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AMP: {"ticker": "AMP", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.9, "1h_rsi": 62.2, "15m_rsi": 68.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MA: {"ticker": "MA", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 58.4, "1h_rsi": 55.2, "15m_rsi": 70.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EXPE: {"ticker": "EXPE", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 62.2, "1h_rsi": 61.6, "15m_rsi": 60.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ANET: {"ticker": "ANET", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 67.8, "1h_rsi": 73.9, "15m_rsi": 67.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL SCHW: {"ticker": "SCHW", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 84.2, "1h_rsi": 65.6, "15m_rsi": 64.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NSC: {"ticker": "NSC", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 72.5, "1h_rsi": 76.1, "15m_rsi": 73.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CI: {"ticker": "CI", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 63.2, "1h_rsi": 63.9, "15m_rsi": 65.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TMO: {"ticker": "TMO", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.0, "1h_rsi": 66.1, "15m_rsi": 62.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL XYL: {"ticker": "XYL", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 72.4, "1h_rsi": 69.8, "15m_rsi": 64.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DG: {"ticker": "DG", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.3, "1h_rsi": 68.5, "15m_rsi": 66.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL SBAC: {"ticker": "SBAC", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 56.9, "1h_rsi": 75.7, "15m_rsi": 75.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DHR: {"ticker": "DHR", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.4, "1h_rsi": 71.7, "15m_rsi": 68.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PODD: {"ticker": "PODD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 58.1, "1h_rsi": 60.9, "15m_rsi": 69.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL VRSN: {"ticker": "VRSN", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 61.2, "15m_rsi": 67.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MOS: {"ticker": "MOS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.1, "1h_rsi": 65.3, "15m_rsi": 64.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ULTA: {"ticker": "ULTA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.1, "1h_rsi": 69.7, "15m_rsi": 62.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AVB: {"ticker": "AVB", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.3, "1h_rsi": 51.5, "15m_rsi": 70.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MNST: {"ticker": "MNST", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 61.6, "15m_rsi": 73.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FIS: {"ticker": "FIS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.4, "1h_rsi": 56.3, "15m_rsi": 59.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL LITE: {"ticker": "LITE", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 50.1, "1h_rsi": 68.2, "15m_rsi": 72.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EBAY: {"ticker": "EBAY", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 70.8, "1h_rsi": 65.8, "15m_rsi": 50.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ZBH: {"ticker": "ZBH", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 60.6, "1h_rsi": 68.9, "15m_rsi": 62.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PH: {"ticker": "PH", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 55.2, "1h_rsi": 59.3, "15m_rsi": 59.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL HD: {"ticker": "HD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.3, "1h_rsi": 55.5, "15m_rsi": 65.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL BBY: {"ticker": "BBY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 73.0, "1h_rsi": 81.0, "15m_rsi": 80.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ODFL: {"ticker": "ODFL", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.0, "1h_rsi": 68.8, "15m_rsi": 65.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PTC: {"ticker": "PTC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 57.1, "1h_rsi": 55.4, "15m_rsi": 59.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AAPL: {"ticker": "AAPL", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.0, "1h_rsi": 64.4, "15m_rsi": 63.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MTB: {"ticker": "MTB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.2, "1h_rsi": 69.5, "15m_rsi": 72.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FTV: {"ticker": "FTV", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 54.7, "1h_rsi": 59.2, "15m_rsi": 64.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MTD: {"ticker": "MTD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.2, "1h_rsi": 61.8, "15m_rsi": 61.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TMUS: {"ticker": "TMUS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 69.6, "15m_rsi": 85.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL GD: {"ticker": "GD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 67.5, "1h_rsi": 64.6, "15m_rsi": 65.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AXP: {"ticker": "AXP", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 57.6, "1h_rsi": 60.5, "15m_rsi": 67.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MSFT: {"ticker": "MSFT", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.2, "1h_rsi": 53.5, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL VST: {"ticker": "VST", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 52.9, "1h_rsi": 63.5, "15m_rsi": 56.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL WFC: {"ticker": "WFC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.0, "1h_rsi": 57.6, "15m_rsi": 53.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL UPS: {"ticker": "UPS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 63.8, "1h_rsi": 59.9, "15m_rsi": 58.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CDW: {"ticker": "CDW", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 68.8, "1h_rsi": 71.0, "15m_rsi": 72.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL GEHC: {"ticker": "GEHC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 50.8, "1h_rsi": 50.1, "15m_rsi": 54.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ABNB: {"ticker": "ABNB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 59.8, "1h_rsi": 62.6, "15m_rsi": 61.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FFIV: {"ticker": "FFIV", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.9, "1h_rsi": 67.8, "15m_rsi": 56.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL COF: {"ticker": "COF", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.4, "1h_rsi": 54.5, "15m_rsi": 60.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CVX: {"ticker": "CVX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 55.1, "1h_rsi": 64.3, "15m_rsi": 74.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EQIX: {"ticker": "EQIX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 51.3, "1h_rsi": 70.1, "15m_rsi": 71.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NDAQ: {"ticker": "NDAQ", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.4, "1h_rsi": 66.7, "15m_rsi": 60.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TECH: {"ticker": "TECH", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 84.2, "1h_rsi": 73.9, "15m_rsi": 72.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL META: {"ticker": "META", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 73.5, "1h_rsi": 76.7, "15m_rsi": 65.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DLTR: {"ticker": "DLTR", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 63.0, "1h_rsi": 62.4, "15m_rsi": 57.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL LYB: {"ticker": "LYB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 50.8, "1h_rsi": 65.3, "15m_rsi": 70.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL KO: {"ticker": "KO", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.7, "1h_rsi": 54.7, "15m_rsi": 55.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL OMC: {"ticker": "OMC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.6, "1h_rsi": 64.4, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ES: {"ticker": "ES", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 63.8, "1h_rsi": 61.6, "15m_rsi": 66.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PAYX: {"ticker": "PAYX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.9, "1h_rsi": 58.2, "15m_rsi": 63.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CPAY: {"ticker": "CPAY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.8, "1h_rsi": 58.6, "15m_rsi": 65.9, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL A: {"ticker": "A", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 57.7, "1h_rsi": 68.8, "15m_rsi": 66.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CFG: {"ticker": "CFG", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 53.2, "1h_rsi": 54.2, "15m_rsi": 60.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CSCO: {"ticker": "CSCO", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.2, "1h_rsi": 79.0, "15m_rsi": 75.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EA: {"ticker": "EA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.5, "1h_rsi": 68.7, "15m_rsi": 62.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL GDDY: {"ticker": "GDDY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.8, "1h_rsi": 56.6, "15m_rsi": 63.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MET: {"ticker": "MET", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 65.6, "1h_rsi": 62.2, "15m_rsi": 53.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PYPL: {"ticker": "PYPL", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.8, "1h_rsi": 69.1, "15m_rsi": 73.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL OTIS: {"ticker": "OTIS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.6, "1h_rsi": 62.1, "15m_rsi": 65.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TFC: {"ticker": "TFC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.0, "1h_rsi": 64.0, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL JKHY: {"ticker": "JKHY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 71.8, "1h_rsi": 62.1, "15m_rsi": 64.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CDNS: {"ticker": "CDNS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 58.2, "1h_rsi": 65.4, "15m_rsi": 56.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NTRS: {"ticker": "NTRS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.9, "1h_rsi": 62.7, "15m_rsi": 59.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL WRB: {"ticker": "WRB", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.0, "1h_rsi": 61.0, "15m_rsi": 66.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EXPD: {"ticker": "EXPD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 69.2, "1h_rsi": 71.1, "15m_rsi": 70.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+Pipeline: no_data=1 | no_4h=334 | no_1h=93 | signals=75 | golden=36
+✅ Completato. Segnali trovati: 75 (golden: 36)
+🚀 HA+RSI MTF Scanner (PERSIST)
+🎯 SIGNAL NVDA: {"ticker": "NVDA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.8, "1h_rsi": 77.0, "15m_rsi": 71.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+💾 Persisted signal for NVDA
+Pipeline: no_data=0 | no_4h=0 | no_1h=0 | signals=1 | golden=0
+✅ Completato. Segnali trovati: 1 (golden: 0)
