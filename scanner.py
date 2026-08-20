@@ -195,6 +195,20 @@ def check_mcap(ticker: str) -> str | None:
         return None
 
 
+def get_market_cap(ticker: str) -> int | None:
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        mcap = (
+            ticker_obj.fast_info.get("marketCap", 0)
+            if hasattr(ticker_obj, "fast_info")
+            else 0
+        )
+        mcap_f = float(mcap or 0)
+        return int(mcap_f) if mcap_f > 0 else None
+    except Exception:
+        return None
+
+
 def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     df_4h, df_1h, df_15m = fetch_mtf_frames(ticker)
 
@@ -219,7 +233,10 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     if not signals:
         return [], "no_pattern", 0
 
+    market_cap = get_market_cap(ticker) if persist else None
     for signal in signals:
+        if market_cap is not None:
+            signal["market_cap"] = market_cap
         logger.info(f"🎯 SIGNAL {ticker} [{signal['timeframe']}]: {json.dumps(signal)}")
         if persist and supabase is not None:
             row = signal_to_crt_row(signal, ticker=ticker)

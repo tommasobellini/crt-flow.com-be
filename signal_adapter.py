@@ -14,6 +14,7 @@ def signal_to_crt_row(signal: dict[str, Any], ticker: str) -> dict[str, Any]:
     rr = abs(tp - entry) / risk if risk > 0 else 2.0
 
     pattern_candles = signal.get("pattern_candles", [])
+    market_cap = signal.get("market_cap")
 
     return {
         "symbol": ticker,
@@ -26,6 +27,7 @@ def signal_to_crt_row(signal: dict[str, Any], ticker: str) -> dict[str, Any]:
         "take_profit": round(tp, 2) if tp else None,
         "rr_ratio": round(rr, 2) if rr else None,
         "pattern_candles": pattern_candles,
+        "market_cap": int(market_cap) if market_cap else None,
         "status": "pending",
         "is_active": True,
         "result": None,
