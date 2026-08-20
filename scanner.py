@@ -198,11 +198,15 @@ def check_mcap(ticker: str) -> str | None:
 def get_market_cap(ticker: str) -> int | None:
     try:
         ticker_obj = yf.Ticker(ticker)
-        mcap = (
-            ticker_obj.fast_info.get("marketCap", 0)
-            if hasattr(ticker_obj, "fast_info")
-            else 0
-        )
+        mcap = 0
+        if hasattr(ticker_obj, "fast_info"):
+            try:
+                mcap = ticker_obj.fast_info.get("marketCap", 0) or 0
+            except Exception:
+                mcap = 0
+        if not mcap:
+            info = getattr(ticker_obj, "info", None) or {}
+            mcap = info.get("marketCap", 0) or 0
         mcap_f = float(mcap or 0)
         return int(mcap_f) if mcap_f > 0 else None
     except Exception:
@@ -234,6 +238,8 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
         return [], "no_pattern", 0
 
     market_cap = get_market_cap(ticker) if persist else None
+    if persist and market_cap is None:
+        logger.warning(f"⚠️  market_cap unavailable for {ticker}")
     for signal in signals:
         if market_cap is not None:
             signal["market_cap"] = market_cap
@@ -242,7 +248,11 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
             row = signal_to_crt_row(signal, ticker=ticker)
             try:
                 supabase.table("crt_signals").insert(row).execute()
-                logger.info(f"💾 Persisted {signal['direction']} signal for {ticker} ({signal['timeframe']})")
+                logger.info(
+                    f"💾 Persisted {signal['direction']} signal for {ticker} "
+                    f"({signal['timeframe']})"
+                    + (f" mcap={market_cap}" if market_cap else " mcap=null")
+                )
             except Exception as e:
                 logger.error(f"Errore persist {ticker} ({signal['timeframe']}): {e}")
 
