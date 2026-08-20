@@ -38,10 +38,18 @@ jobs:
         run: |
           if [ "${{ github.event.schedule }}" == "0 1 * * *" ]; then
             echo "🚀 Running Daily DCA Screener..."
-            python dca_screener.py
+            if [ -f dca_screener.py ]; then
+              python dca_screener.py
+            else
+              echo "⚠️  dca_screener.py non presente — skip"
+            fi
           else
             echo "📊 Running Hourly Intraday Scanner (S&P 500 + NASDAQ)..."
             python scanner.py --index sp500 --persist
             python scanner.py --index nasdaq --persist
-            python dca_notifier.py
+            if [ -f dca_notifier.py ]; then
+              python dca_notifier.py
+            else
+              echo "⚠️  dca_notifier.py non presente — skip"
+            fi
           fi

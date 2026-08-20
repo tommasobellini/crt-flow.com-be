@@ -102,22 +102,88 @@ def get_sp500_tickers():
         return ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"]
 
 
+def _normalize_tickers(raw: list) -> list[str]:
+    out: list[str] = []
+    for t in raw:
+        if not isinstance(t, str):
+            continue
+        sym = t.strip().replace(".", "-")
+        if sym and len(sym) <= 8 and " " not in sym:
+            out.append(sym)
+    return out
+
+
 def get_nasdaq100_tickers():
+    """Load NASDAQ-100 constituents. Wikipedia no longer exposes a Ticker table."""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    sources: list[tuple[str, str]] = [
+        ("stockanalysis", "https://stockanalysis.com/list/nasdaq-100-stocks/"),
+        ("wikipedia", "https://en.wikipedia.org/wiki/Nasdaq-100"),
+    ]
+
+    for label, url in sources:
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            tables = pd.read_html(io.StringIO(response.text))
+            for table in tables:
+                col = None
+                if "Symbol" in table.columns:
+                    col = "Symbol"
+                elif "Ticker" in table.columns:
+                    col = "Ticker"
+                if col is None:
+                    continue
+                tickers = _normalize_tickers(table[col].tolist())
+                if len(tickers) >= 80:
+                    logger.info(f"   NASDAQ 100: {len(tickers)} ticker ({label})")
+                    return tickers
+        except Exception as e:
+            logger.warning(f"NASDAQ 100 ({label}): {e}")
+
+    fallback = [
+        "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "AVGO", "COST",
+        "NFLX", "AMD", "PEP", "ADBE", "CSCO", "TMUS", "INTC", "INTU", "QCOM", "AMAT",
+        "ISRG", "BKNG", "CMCSA", "TXN", "VRTX", "AMGN", "HON", "SBUX", "GILD", "ADI",
+        "PANW", "MU", "LRCX", "REGN", "MELI", "ADP", "KLAC", "SNPS", "CDNS", "CRWD",
+        "MAR", "CTAS", "ORLY", "CSX", "PCAR", "NXPI", "FTNT", "AEP", "ROST", "PAYX",
+        "ODFL", "FAST", "KDP", "VRSK", "EXC", "BKR", "CTSH", "GEHC", "XEL", "EA",
+        "IDXX", "FANG", "CCEP", "TTWO", "ON", "ANSS", "CDW", "ZS", "DXCM", "BIIB",
+        "GFS", "MDB", "WBD", "ILMN", "TEAM", "DDOG", "MRVL", "WDAY", "ABNB", "DASH",
+        "ARM", "PLTR", "APP", "MSTR", "SHOP",
+    ]
+    logger.warning(
+        f"NASDAQ 100: usando fallback statico ({len(fallback)} ticker)"
+    )
+    return fallback
+
+
+def _persist_signal_row(row: dict) -> None:
+    """Insert crt_signals row; retry without market_cap if column missing (PGRST204)."""
+    assert supabase is not None
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = "https://en.wikipedia.org/wiki/NASDAQ-100"
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        table = pd.read_html(io.StringIO(response.text))
-        for t in table:
-            if "Ticker" in t.columns:
-                return [x.replace(".", "-") for x in t["Ticker"].tolist() if isinstance(x, str)]
-            if "Symbol" in t.columns:
-                return [x.replace(".", "-") for x in t["Symbol"].tolist() if isinstance(x, str)]
-        return []
+        supabase.table("crt_signals").insert(row).execute()
+        return
     except Exception as e:
-        logger.error(f"Errore NASDAQ: {e}")
-        return []
+        code = getattr(e, "code", None)
+        err = str(e)
+        missing_mcap = code == "PGRST204" or (
+            "market_cap" in err and ("PGRST204" in err or "schema cache" in err)
+        )
+        if missing_mcap and "market_cap" in row:
+            stripped = {k: v for k, v in row.items() if k != "market_cap"}
+            logger.warning(
+                "crt_signals.market_cap missing in schema cache — "
+                "retrying insert without it (run migration + Reload schema)"
+            )
+            supabase.table("crt_signals").insert(stripped).execute()
+            return
+        raise
 
 
 def _parse_iwm_holdings_csv(text: str) -> list[str]:
@@ -247,7 +313,7 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
         if persist and supabase is not None:
             row = signal_to_crt_row(signal, ticker=ticker)
             try:
-                supabase.table("crt_signals").insert(row).execute()
+                _persist_signal_row(row)
                 logger.info(
                     f"💾 Persisted {signal['direction']} signal for {ticker} "
                     f"({signal['timeframe']})"

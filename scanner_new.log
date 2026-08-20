@@ -10151,3 +10151,59 @@ Ticker post M-Cap (>= $3M): 1253
 💾 Persisted BULLISH signal for RCKT (4H)
 Pipeline: no_data=312 | no_pattern=934 | signals=7 | total_rows=7
 ✅ Completato. Segnali trovati: 7
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 1988
+🎯 SIGNAL NXRT [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 24.11, "stop_loss": 23.8979, "take_profit": 24.5341, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 24.0319, "swept_level": 23.91, "structure_level": 23.915, "ticker": "NXRT", "market_cap": 614728487}
+Errore persist NXRT (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL USLM [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 119.46, "stop_loss": 117.7453, "take_profit": 122.8895, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 119.1577, "swept_level": 117.805, "structure_level": 118.7648, "ticker": "USLM", "market_cap": 3426538146}
+Errore persist USLM (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL CNK [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 37.32, "stop_loss": 37.8637, "take_profit": 36.2327, "timestamp": "2026-08-19T15:30:00-04:00", "ema_20": 37.3732, "swept_level": 37.845, "structure_level": 37.8, "ticker": "CNK", "market_cap": 4325830393}
+Errore persist CNK (1H): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL LAKE [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.15, "stop_loss": 11.8339, "take_profit": 12.7821, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 12.0607, "swept_level": 11.84, "structure_level": 11.87, "ticker": "LAKE", "market_cap": 120206420}
+Errore persist LAKE (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL RXRX [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.495, "stop_loss": 2.9283, "take_profit": 4.6285, "timestamp": "2026-08-19T16:00:00", "ema_20": 3.2163, "swept_level": 2.92, "structure_level": 3.01, "ticker": "RXRX", "market_cap": 1876948804}
+Errore persist RXRX (4H): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL MFA [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 9.1, "stop_loss": 9.0405, "take_profit": 9.2191, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 9.08, "swept_level": 9.045, "structure_level": 9.051, "ticker": "MFA", "market_cap": 919900274}
+Errore persist MFA (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL TROX [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 5.73, "stop_loss": 5.6571, "take_profit": 5.8757, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 5.7219, "swept_level": 5.655, "structure_level": 5.665, "ticker": "TROX", "market_cap": 915081169}
+Errore persist TROX (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Pipeline: no_data=1336 | no_pattern=645 | signals=7 | total_rows=7
+✅ Completato. Segnali trovati: 7
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 1112
+🎯 SIGNAL DHI [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 151.86, "stop_loss": 150.1041, "take_profit": 155.3719, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 151.2316, "swept_level": 150.18, "structure_level": 150.63, "ticker": "DHI", "market_cap": 42475434577}
+Errore persist DHI (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL NTCT [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 38.35, "stop_loss": 38.8392, "take_profit": 37.3716, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 38.612, "swept_level": 38.82, "structure_level": 38.78, "ticker": "NTCT", "market_cap": 2788325304}
+Errore persist NTCT (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL LAKE [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.15, "stop_loss": 11.8339, "take_profit": 12.7821, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 12.0607, "swept_level": 11.84, "structure_level": 11.87, "ticker": "LAKE", "market_cap": 120206420}
+Errore persist LAKE (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL MFA [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 9.1, "stop_loss": 9.0405, "take_profit": 9.2191, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 9.08, "swept_level": 9.045, "structure_level": 9.051, "ticker": "MFA", "market_cap": 919900274}
+Errore persist MFA (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL CBRE [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 155.07, "stop_loss": 153.5825, "take_profit": 158.0451, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 153.9941, "swept_level": 153.415, "structure_level": 153.825, "ticker": "CBRE", "market_cap": 44904443581}
+Errore persist CBRE (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL LMT [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 589.44, "stop_loss": 613.0452, "take_profit": 542.2296, "timestamp": "2026-08-19T16:00:00", "ema_20": 595.2881, "swept_level": 612.7505, "structure_level": 610.36, "ticker": "LMT", "market_cap": 135970377764}
+Errore persist LMT (4H): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+🎯 SIGNAL NXRT [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 24.11, "stop_loss": 23.8979, "take_profit": 24.5341, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 24.0319, "swept_level": 23.91, "structure_level": 23.915, "ticker": "NXRT", "market_cap": 614728487}
+Errore persist NXRT (15M): {'message': "Could not find the 'market_cap' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Pipeline: no_data=44 | no_pattern=1061 | signals=7 | total_rows=7
+✅ Completato. Segnali trovati: 7
