@@ -1,3 +1,3 @@
-from strategy.ha_rsi_mtf import evaluate_symbol
+from strategy.wick_retrace_3c import detect_latest_pattern
 
-__all__ = ["evaluate_symbol"]
+__all__ = ["detect_latest_pattern"]

@@ -41,7 +41,7 @@ jobs:
             python dca_screener.py
           else
             echo "📊 Running Hourly Intraday Scanner (S&P 500 + NASDAQ)..."
-            python scanner.py --index sp500
-            python scanner.py --index nasdaq
+            python scanner.py --index sp500 --persist
+            python scanner.py --index nasdaq --persist
             python dca_notifier.py
           fi

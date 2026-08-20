@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 from market_data import fetch_mtf_frames
-from strategy.ha_rsi_mtf import evaluate_funnel, evaluate_symbol
+from strategy.wick_retrace_3c import detect_latest_pattern
+from strategy.config import MIN_BARS_4H, MIN_BARS_1H, MIN_BARS_15M
 from signal_adapter import signal_to_crt_row
 
 # --- LOGGING ---
@@ -27,7 +28,7 @@ class SupabaseLoggingHandler(logging.Handler):
     def __init__(self, supabase_client):
         super().__init__()
         self.supabase = supabase_client
-        self.source = "scanner_ha_rsi_engine"
+        self.source = "scanner_wick_3c_engine"
 
     def emit(self, record):
         try:
@@ -67,8 +68,10 @@ def setup_supabase():
         load_dotenv(".env.local")
 
     url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    key = os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY") or os.getenv(
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     )
 
     if url and key:
@@ -192,34 +195,48 @@ def check_mcap(ticker: str) -> str | None:
         return None
 
 
-def scan_ticker(ticker: str, persist: bool) -> tuple[dict | None, str, bool]:
+def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     df_4h, df_1h, df_15m = fetch_mtf_frames(ticker)
-    stage, _ = evaluate_funnel(df_4h, df_1h, df_15m)
-    if stage == "no_data":
-        return None, stage, False
 
-    signal = evaluate_symbol(ticker, df_4h, df_1h, df_15m)
-    if signal is None:
-        return None, stage, False
+    frames: list[tuple[str, pd.DataFrame | None, int]] = [
+        ("4H", df_4h, MIN_BARS_4H),
+        ("1H", df_1h, MIN_BARS_1H),
+        ("15M", df_15m, MIN_BARS_15M),
+    ]
 
-    is_golden = bool(signal.get("is_golden"))
-    logger.info(f"🎯 SIGNAL {ticker}: {json.dumps(signal)}")
-    if persist and supabase is not None:
-        entry = float(df_15m["Close"].iloc[-1])
-        row = signal_to_crt_row(signal, entry_price=entry)
-        try:
-            supabase.table("crt_signals").insert(row).execute()
-            logger.info(f"💾 Persisted signal for {ticker}")
-        except Exception as e:
-            logger.error(f"Errore persist {ticker}: {e}")
-    return signal, "signal", is_golden
+    if all(f is None or len(f) < min_b for _, f, min_b in frames):
+        return [], "no_data", 0
+
+    signals: list[dict] = []
+    for tf_label, df, min_bars in frames:
+        if df is None or len(df) < min_bars:
+            continue
+        pattern = detect_latest_pattern(df, tf_label)  # type: ignore[arg-type]
+        if pattern is not None:
+            pattern["ticker"] = ticker
+            signals.append(pattern)
+
+    if not signals:
+        return [], "no_pattern", 0
+
+    for signal in signals:
+        logger.info(f"🎯 SIGNAL {ticker} [{signal['timeframe']}]: {json.dumps(signal)}")
+        if persist and supabase is not None:
+            row = signal_to_crt_row(signal, ticker=ticker)
+            try:
+                supabase.table("crt_signals").insert(row).execute()
+                logger.info(f"💾 Persisted {signal['direction']} signal for {ticker} ({signal['timeframe']})")
+            except Exception as e:
+                logger.error(f"Errore persist {ticker} ({signal['timeframe']}): {e}")
+
+    return signals, "signal", len(signals)
 
 
 def main():
     setup_logging()
     setup_supabase()
 
-    parser = argparse.ArgumentParser(description="CRT Flow HA+RSI MTF Scanner")
+    parser = argparse.ArgumentParser(description="CRT Flow 3C Wick Scanner")
     parser.add_argument(
         "--index",
         type=str,
@@ -253,7 +270,7 @@ def main():
             pass
 
     mode = "PERSIST" if args.persist else "DRY-RUN"
-    logger.info(f"🚀 HA+RSI MTF Scanner ({mode})")
+    logger.info(f"🚀 3C Wick Scanner ({mode})")
 
     if args.symbol:
         tickers = [args.symbol.upper()]
@@ -299,11 +316,9 @@ def main():
         return
 
     signals_found = 0
-    golden_found = 0
     funnel_counts: dict[str, int] = {
         "no_data": 0,
-        "no_4h_structure": 0,
-        "no_1h_alignment": 0,
+        "no_pattern": 0,
         "signal": 0,
     }
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
@@ -313,24 +328,21 @@ def main():
         for future in concurrent.futures.as_completed(futures):
             ticker = futures[future]
             try:
-                signal, stage, is_golden = future.result()
+                signals, stage, count = future.result()
                 funnel_counts[stage] = funnel_counts.get(stage, 0) + 1
-                if signal is not None:
-                    signals_found += 1
-                    if is_golden:
-                        golden_found += 1
+                if signals:
+                    signals_found += count
             except Exception as e:
                 logger.error(f"Errore {ticker}: {e}")
 
     logger.info(
         "Pipeline: "
         f"no_data={funnel_counts['no_data']} | "
-        f"no_4h={funnel_counts['no_4h_structure']} | "
-        f"no_1h={funnel_counts['no_1h_alignment']} | "
+        f"no_pattern={funnel_counts['no_pattern']} | "
         f"signals={funnel_counts['signal']} | "
-        f"golden={golden_found}"
+        f"total_rows={signals_found}"
     )
-    logger.info(f"✅ Completato. Segnali trovati: {signals_found} (golden: {golden_found})")
+    logger.info(f"✅ Completato. Segnali trovati: {signals_found}")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-import json
-
 import pandas as pd
 import pytest
 
@@ -125,13 +123,11 @@ def test_signal_adapter_ha_rsi():
     assert row["symbol"] == "NVDA"
     assert row["type"] == "bullish_ha_rsi"
     assert row["timeframe"] == "15M"
-    assert row["diamond_score"] == "GOLDEN"
-    assert row["confluence_level"] == "4H RSI 54.2"
-    assert row["liquidity_tier"] == "1H RSI 58.5"
-    meta = json.loads(row["trigger_candles"])
-    assert meta["strategy"] == "ha_rsi_mtf"
-    assert meta["is_golden"] is True
-    assert meta["15m_rsi"] == 51.1
+    assert row["is_golden"] is True
+    assert row["rsi_4h"] == 54.2
+    assert row["rsi_1h"] == 58.5
+    assert row["rsi_15m"] == 51.1
+    assert row["entry_price"] == 200.0
 
 
 def test_clean_df_flattens_yfinance_multiindex():

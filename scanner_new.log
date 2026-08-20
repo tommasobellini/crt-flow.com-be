@@ -9674,3 +9674,480 @@ Pipeline: no_data=1 | no_4h=334 | no_1h=93 | signals=75 | golden=36
 💾 Persisted signal for NVDA
 Pipeline: no_data=0 | no_4h=0 | no_1h=0 | signals=1 | golden=0
 ✅ Completato. Segnali trovati: 1 (golden: 0)
+🚀 HA+RSI MTF Scanner (DRY-RUN)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+✅ Ticker unici: 503 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 501
+🎯 SIGNAL GEHC: {"ticker": "GEHC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 50.8, "1h_rsi": 50.1, "15m_rsi": 54.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AVB: {"ticker": "AVB", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.3, "1h_rsi": 51.5, "15m_rsi": 70.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL XYL: {"ticker": "XYL", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 72.4, "1h_rsi": 69.8, "15m_rsi": 64.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL OTIS: {"ticker": "OTIS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.6, "1h_rsi": 62.1, "15m_rsi": 65.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL APD: {"ticker": "APD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.1, "1h_rsi": 51.5, "15m_rsi": 62.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL A: {"ticker": "A", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 57.7, "1h_rsi": 68.8, "15m_rsi": 66.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EXPE: {"ticker": "EXPE", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 62.2, "1h_rsi": 61.6, "15m_rsi": 60.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CVX: {"ticker": "CVX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 55.1, "1h_rsi": 64.3, "15m_rsi": 74.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MSFT: {"ticker": "MSFT", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.2, "1h_rsi": 53.5, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EBAY: {"ticker": "EBAY", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 70.8, "1h_rsi": 65.8, "15m_rsi": 50.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FIS: {"ticker": "FIS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.4, "1h_rsi": 56.3, "15m_rsi": 59.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ZBH: {"ticker": "ZBH", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 60.6, "1h_rsi": 68.9, "15m_rsi": 62.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ANET: {"ticker": "ANET", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 67.8, "1h_rsi": 73.9, "15m_rsi": 67.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MA: {"ticker": "MA", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 58.4, "1h_rsi": 55.2, "15m_rsi": 70.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DLTR: {"ticker": "DLTR", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 63.0, "1h_rsi": 62.4, "15m_rsi": 57.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NSC: {"ticker": "NSC", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 72.5, "1h_rsi": 76.1, "15m_rsi": 73.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL VRSN: {"ticker": "VRSN", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 61.2, "15m_rsi": 67.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL KO: {"ticker": "KO", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.7, "1h_rsi": 54.7, "15m_rsi": 55.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PODD: {"ticker": "PODD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 58.1, "1h_rsi": 60.9, "15m_rsi": 69.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TMO: {"ticker": "TMO", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.0, "1h_rsi": 67.0, "15m_rsi": 62.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DHR: {"ticker": "DHR", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.4, "1h_rsi": 71.7, "15m_rsi": 68.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CSCO: {"ticker": "CSCO", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.2, "1h_rsi": 79.0, "15m_rsi": 75.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PTC: {"ticker": "PTC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 57.1, "1h_rsi": 55.4, "15m_rsi": 59.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL GDDY: {"ticker": "GDDY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.8, "1h_rsi": 56.6, "15m_rsi": 63.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CI: {"ticker": "CI", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 63.2, "1h_rsi": 63.9, "15m_rsi": 65.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MDT: {"ticker": "MDT", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 60.3, "1h_rsi": 65.2, "15m_rsi": 68.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL SCHW: {"ticker": "SCHW", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 84.2, "1h_rsi": 65.6, "15m_rsi": 64.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NTRS: {"ticker": "NTRS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.9, "1h_rsi": 62.7, "15m_rsi": 59.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL COF: {"ticker": "COF", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.4, "1h_rsi": 54.5, "15m_rsi": 60.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ES: {"ticker": "ES", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 63.8, "1h_rsi": 61.6, "15m_rsi": 66.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MOS: {"ticker": "MOS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.1, "1h_rsi": 65.3, "15m_rsi": 64.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PH: {"ticker": "PH", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 55.2, "1h_rsi": 59.3, "15m_rsi": 59.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL BLK: {"ticker": "BLK", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.9, "1h_rsi": 72.5, "15m_rsi": 62.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AAPL: {"ticker": "AAPL", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.0, "1h_rsi": 64.4, "15m_rsi": 63.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL LYB: {"ticker": "LYB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 50.8, "1h_rsi": 65.3, "15m_rsi": 70.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL GD: {"ticker": "GD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 67.5, "1h_rsi": 64.6, "15m_rsi": 65.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MTD: {"ticker": "MTD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.2, "1h_rsi": 61.8, "15m_rsi": 61.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MET: {"ticker": "MET", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 65.6, "1h_rsi": 62.2, "15m_rsi": 53.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FTV: {"ticker": "FTV", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 54.7, "1h_rsi": 59.2, "15m_rsi": 64.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ODFL: {"ticker": "ODFL", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 62.0, "1h_rsi": 68.8, "15m_rsi": 65.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TFC: {"ticker": "TFC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.0, "1h_rsi": 64.0, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CPAY: {"ticker": "CPAY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 54.8, "1h_rsi": 58.6, "15m_rsi": 65.9, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CFG: {"ticker": "CFG", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 53.2, "1h_rsi": 54.2, "15m_rsi": 60.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL WRB: {"ticker": "WRB", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.0, "1h_rsi": 61.0, "15m_rsi": 66.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TMUS: {"ticker": "TMUS", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 69.6, "15m_rsi": 85.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EA: {"ticker": "EA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.5, "1h_rsi": 68.7, "15m_rsi": 62.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AMP: {"ticker": "AMP", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 66.9, "1h_rsi": 62.2, "15m_rsi": 68.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EXPD: {"ticker": "EXPD", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 69.2, "1h_rsi": 71.1, "15m_rsi": 70.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL FFIV: {"ticker": "FFIV", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 68.9, "1h_rsi": 67.8, "15m_rsi": 56.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MNST: {"ticker": "MNST", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 59.7, "1h_rsi": 61.6, "15m_rsi": 73.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL EQIX: {"ticker": "EQIX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 51.3, "1h_rsi": 70.1, "15m_rsi": 71.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL JKHY: {"ticker": "JKHY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 71.8, "1h_rsi": 62.1, "15m_rsi": 64.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL OMC: {"ticker": "OMC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 67.6, "1h_rsi": 64.4, "15m_rsi": 57.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL VST: {"ticker": "VST", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 52.9, "1h_rsi": 63.5, "15m_rsi": 56.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL AXP: {"ticker": "AXP", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 57.6, "1h_rsi": 60.5, "15m_rsi": 67.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL WFC: {"ticker": "WFC", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.0, "1h_rsi": 57.6, "15m_rsi": 53.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PYPL: {"ticker": "PYPL", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.8, "1h_rsi": 69.1, "15m_rsi": 73.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL NDAQ: {"ticker": "NDAQ", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.4, "1h_rsi": 66.7, "15m_rsi": 60.2, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ABNB: {"ticker": "ABNB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 59.8, "1h_rsi": 62.6, "15m_rsi": 61.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL MTB: {"ticker": "MTB", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.2, "1h_rsi": 69.5, "15m_rsi": 72.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DXCM: {"ticker": "DXCM", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 64.8, "1h_rsi": 67.1, "15m_rsi": 68.1, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL DG: {"ticker": "DG", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 61.3, "1h_rsi": 68.5, "15m_rsi": 66.6, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL RF: {"ticker": "RF", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 65.5, "1h_rsi": 68.4, "15m_rsi": 61.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL SBAC: {"ticker": "SBAC", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 56.9, "1h_rsi": 75.7, "15m_rsi": 75.3, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CDW: {"ticker": "CDW", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 68.8, "1h_rsi": 71.0, "15m_rsi": 72.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL BBY: {"ticker": "BBY", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 73.0, "1h_rsi": 81.0, "15m_rsi": 80.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL CDNS: {"ticker": "CDNS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 58.2, "1h_rsi": 65.4, "15m_rsi": 56.8, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL ULTA: {"ticker": "ULTA", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 56.1, "1h_rsi": 69.7, "15m_rsi": 62.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL UPS: {"ticker": "UPS", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 63.8, "1h_rsi": 59.9, "15m_rsi": 58.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL PAYX: {"ticker": "PAYX", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 64.9, "1h_rsi": 58.2, "15m_rsi": 63.4, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL HD: {"ticker": "HD", "signal_type": "BULLISH", "is_golden": false, "4h_rsi": 51.3, "1h_rsi": 55.5, "15m_rsi": 65.5, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL LITE: {"ticker": "LITE", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 50.1, "1h_rsi": 68.2, "15m_rsi": 72.7, "timestamp": "2026-07-10T15:45:00-04:00"}
+🎯 SIGNAL TECH: {"ticker": "TECH", "signal_type": "BULLISH", "is_golden": true, "4h_rsi": 84.2, "1h_rsi": 73.9, "15m_rsi": 72.0, "timestamp": "2026-07-10T15:45:00-04:00"}
+Pipeline: no_data=1 | no_4h=335 | no_1h=92 | signals=73 | golden=36
+✅ Completato. Segnali trovati: 73 (golden: 36)
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 1622
+🎯 SIGNAL DHI [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 151.86, "stop_loss": 150.1041, "take_profit": 155.3719, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "DHI"}
+🎯 SIGNAL ACTG [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 4.545, "stop_loss": 4.6323, "take_profit": 4.3705, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ACTG"}
+Errore persist DHI (15M): {'message': "Could not find the 'pattern_candles' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Errore persist ACTG (1H): {'message': "Could not find the 'pattern_candles' column of 'crt_signals' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Pipeline: no_data=1619 | no_pattern=1 | signals=2 | total_rows=2
+✅ Completato. Segnali trovati: 2
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 1442
+🎯 SIGNAL VST [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 142.69, "stop_loss": 140.9737, "take_profit": 146.1227, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "VST"}
+🎯 SIGNAL TWI [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 6.53, "stop_loss": 6.4317, "take_profit": 6.7265, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "TWI"}
+💾 Persisted BULLISH signal for VST (15M)
+💾 Persisted BULLISH signal for TWI (15M)
+🎯 SIGNAL MG [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 19.44, "stop_loss": 17.8253, "take_profit": 22.6694, "timestamp": "2026-08-19T16:00:00", "ticker": "MG"}
+💾 Persisted BULLISH signal for MG (4H)
+🎯 SIGNAL EE [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 38.18, "stop_loss": 37.0809, "take_profit": 40.3782, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "EE"}
+🎯 SIGNAL UEC [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 11.64, "stop_loss": 10.6465, "take_profit": 13.627, "timestamp": "2026-08-19T16:00:00", "ticker": "UEC"}
+🎯 SIGNAL HCA [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 406.98, "stop_loss": 415.4435, "take_profit": 390.0531, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "HCA"}
+💾 Persisted BULLISH signal for EE (1H)
+🎯 SIGNAL UDR [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 37.51, "stop_loss": 37.1812, "take_profit": 38.1675, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "UDR"}
+🎯 SIGNAL FBLA [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 15.59, "stop_loss": 15.7228, "take_profit": 15.3244, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "FBLA"}
+💾 Persisted BULLISH signal for UEC (4H)
+💾 Persisted BEARISH signal for HCA (1H)
+💾 Persisted BULLISH signal for UDR (1H)
+💾 Persisted BEARISH signal for FBLA (1H)
+🎯 SIGNAL BFST [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 31.05, "stop_loss": 31.2355, "take_profit": 30.6789, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "BFST"}
+🎯 SIGNAL GOOD [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 13.03, "stop_loss": 12.9085, "take_profit": 13.273, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "GOOD"}
+🎯 SIGNAL CSCO [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 110.56, "stop_loss": 112.1153, "take_profit": 107.4494, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "CSCO"}
+💾 Persisted BEARISH signal for BFST (15M)
+💾 Persisted BULLISH signal for GOOD (1H)
+💾 Persisted BEARISH signal for CSCO (1H)
+🎯 SIGNAL CSCO [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 110.56, "stop_loss": 111.9053, "take_profit": 107.8694, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CSCO"}
+💾 Persisted BEARISH signal for CSCO (15M)
+🎯 SIGNAL PFBC [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 103.02, "stop_loss": 103.9115, "take_profit": 101.237, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "PFBC"}
+💾 Persisted BEARISH signal for PFBC (15M)
+🎯 SIGNAL QTWO [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 64.09, "stop_loss": 64.847, "take_profit": 62.5759, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "QTWO"}
+💾 Persisted BEARISH signal for QTWO (15M)
+🎯 SIGNAL VSTS [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 13.05, "stop_loss": 13.1965, "take_profit": 12.757, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "VSTS"}
+💾 Persisted BEARISH signal for VSTS (1H)
+🎯 SIGNAL APPS [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 11.23, "stop_loss": 12.3956, "take_profit": 8.8988, "timestamp": "2026-08-19T16:00:00", "ticker": "APPS"}
+💾 Persisted BEARISH signal for APPS (4H)
+🎯 SIGNAL DDOG [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 233.43, "stop_loss": 250.0967, "take_profit": 200.0966, "timestamp": "2026-08-19T16:00:00", "ticker": "DDOG"}
+💾 Persisted BEARISH signal for DDOG (4H)
+🎯 SIGNAL KRG [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 26.45, "stop_loss": 26.2668, "take_profit": 26.8165, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "KRG"}
+💾 Persisted BULLISH signal for KRG (1H)
+🎯 SIGNAL CECO [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 75.24, "stop_loss": 72.1624, "take_profit": 81.3952, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "CECO"}
+💾 Persisted BULLISH signal for CECO (1H)
+🎯 SIGNAL BAX [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 26.665, "stop_loss": 25.7367, "take_profit": 28.5217, "timestamp": "2026-08-19T16:00:00", "ticker": "BAX"}
+🎯 SIGNAL ADTN [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 8.02, "stop_loss": 7.891, "take_profit": 8.278, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "ADTN"}
+💾 Persisted BULLISH signal for BAX (4H)
+💾 Persisted BULLISH signal for ADTN (15M)
+🎯 SIGNAL AGYS [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 116.88, "stop_loss": 115.1816, "take_profit": 120.2769, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AGYS"}
+💾 Persisted BULLISH signal for AGYS (1H)
+🎯 SIGNAL CRGY [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 13.425, "stop_loss": 12.7683, "take_profit": 14.7384, "timestamp": "2026-08-19T16:00:00", "ticker": "CRGY"}
+💾 Persisted BULLISH signal for CRGY (4H)
+🎯 SIGNAL NPWR [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 1.66, "stop_loss": 1.7408, "take_profit": 1.4983, "timestamp": "2026-08-19T16:00:00", "ticker": "NPWR"}
+💾 Persisted BEARISH signal for NPWR (4H)
+🎯 SIGNAL VICR [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 217.35, "stop_loss": 213.7413, "take_profit": 224.5674, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "VICR"}
+💾 Persisted BULLISH signal for VICR (15M)
+🎯 SIGNAL TDOC [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 6.66, "stop_loss": 6.5317, "take_profit": 6.9167, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "TDOC"}
+🎯 SIGNAL AIZ [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 278.54, "stop_loss": 280.2693, "take_profit": 275.0815, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "AIZ"}
+🎯 SIGNAL TXG [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 62.22, "stop_loss": 59.8239, "take_profit": 67.0122, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "TXG"}
+💾 Persisted BULLISH signal for TDOC (1H)
+💾 Persisted BEARISH signal for AIZ (15M)
+💾 Persisted BULLISH signal for TXG (1H)
+🎯 SIGNAL KROS [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 11.075, "stop_loss": 10.2545, "take_profit": 12.7161, "timestamp": "2026-08-19T16:00:00", "ticker": "KROS"}
+💾 Persisted BULLISH signal for KROS (4H)
+Pipeline: no_data=1300 | no_pattern=114 | signals=28 | total_rows=29
+✅ Completato. Segnali trovati: 29
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 791
+🎯 SIGNAL XPER [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 6.26, "stop_loss": 6.5681, "take_profit": 5.6437, "timestamp": "2026-08-19T16:00:00", "ticker": "XPER"}
+🎯 SIGNAL BHB [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 39.495, "stop_loss": 39.6997, "take_profit": 39.0855, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "BHB"}
+💾 Persisted BEARISH signal for XPER (4H)
+💾 Persisted BEARISH signal for BHB (15M)
+🎯 SIGNAL XPER [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 6.26, "stop_loss": 6.3831, "take_profit": 6.0137, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "XPER"}
+💾 Persisted BEARISH signal for XPER (15M)
+🎯 SIGNAL BLFS [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 36.45, "stop_loss": 34.7418, "take_profit": 39.8665, "timestamp": "2026-08-19T16:00:00", "ticker": "BLFS"}
+💾 Persisted BULLISH signal for BLFS (4H)
+🎯 SIGNAL SLVM [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 37.19, "stop_loss": 37.7286, "take_profit": 36.1128, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SLVM"}
+💾 Persisted BEARISH signal for SLVM (1H)
+🎯 SIGNAL UDR [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 37.51, "stop_loss": 37.1812, "take_profit": 38.1675, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "UDR"}
+💾 Persisted BULLISH signal for UDR (1H)
+🎯 SIGNAL OFLX [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 28.06, "stop_loss": 28.344, "take_profit": 27.4919, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "OFLX"}
+💾 Persisted BEARISH signal for OFLX (1H)
+🎯 SIGNAL PLMR [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 127.02, "stop_loss": 128.7135, "take_profit": 123.633, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "PLMR"}
+🎯 SIGNAL FOXA [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 67.96, "stop_loss": 70.984, "take_profit": 61.912, "timestamp": "2026-08-19T16:00:00", "ticker": "FOXA"}
+🎯 SIGNAL KRG [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 26.45, "stop_loss": 26.2668, "take_profit": 26.8165, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "KRG"}
+💾 Persisted BEARISH signal for PLMR (15M)
+💾 Persisted BEARISH signal for FOXA (4H)
+💾 Persisted BULLISH signal for KRG (1H)
+🎯 SIGNAL MRK [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 152.22, "stop_loss": 153.5761, "take_profit": 149.5078, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "MRK"}
+💾 Persisted BEARISH signal for MRK (15M)
+🎯 SIGNAL CVLT [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 137.17, "stop_loss": 145.5486, "take_profit": 120.4128, "timestamp": "2026-08-19T16:00:00", "ticker": "CVLT"}
+💾 Persisted BEARISH signal for CVLT (4H)
+🎯 SIGNAL BTBT [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 1.395, "stop_loss": 1.3393, "take_profit": 1.5064, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "BTBT"}
+🎯 SIGNAL A [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 155.4, "stop_loss": 147.7023, "take_profit": 170.7954, "timestamp": "2026-08-19T16:00:00", "ticker": "A"}
+💾 Persisted BULLISH signal for BTBT (15M)
+💾 Persisted BULLISH signal for A (4H)
+🎯 SIGNAL BR [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 176.035, "stop_loss": 177.5955, "take_profit": 172.914, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "BR"}
+💾 Persisted BEARISH signal for BR (1H)
+🎯 SIGNAL AVIR [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 5.59, "stop_loss": 5.1422, "take_profit": 6.4856, "timestamp": "2026-08-19T16:00:00", "ticker": "AVIR"}
+💾 Persisted BULLISH signal for AVIR (4H)
+🎯 SIGNAL MMS [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 58.4, "stop_loss": 58.9742, "take_profit": 57.2516, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MMS"}
+💾 Persisted BEARISH signal for MMS (1H)
+🎯 SIGNAL MMS [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 58.4, "stop_loss": 58.7992, "take_profit": 57.6016, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "MMS"}
+💾 Persisted BEARISH signal for MMS (15M)
+🎯 SIGNAL GOOD [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 13.03, "stop_loss": 12.9085, "take_profit": 13.273, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "GOOD"}
+💾 Persisted BULLISH signal for GOOD (1H)
+🎯 SIGNAL VZ [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 49.36, "stop_loss": 48.8753, "take_profit": 50.3294, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "VZ"}
+💾 Persisted BULLISH signal for VZ (1H)
+🎯 SIGNAL LION [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 11.57, "stop_loss": 12.1458, "take_profit": 10.4184, "timestamp": "2026-08-19T16:00:00", "ticker": "LION"}
+💾 Persisted BEARISH signal for LION (4H)
+🎯 SIGNAL BULL [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 8.635, "stop_loss": 7.8257, "take_profit": 10.2536, "timestamp": "2026-08-19T16:00:00", "ticker": "BULL"}
+💾 Persisted BULLISH signal for BULL (4H)
+🎯 SIGNAL MRX [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 70.21, "stop_loss": 71.7051, "take_profit": 67.2198, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MRX"}
+🎯 SIGNAL RCKT [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.655, "stop_loss": 3.2682, "take_profit": 4.4287, "timestamp": "2026-08-19T16:00:00", "ticker": "RCKT"}
+💾 Persisted BEARISH signal for MRX (1H)
+💾 Persisted BULLISH signal for RCKT (4H)
+🎯 SIGNAL DEI [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 11.82, "stop_loss": 11.7191, "take_profit": 12.0218, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "DEI"}
+🎯 SIGNAL PRME [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.535, "stop_loss": 3.0182, "take_profit": 4.5685, "timestamp": "2026-08-19T16:00:00", "ticker": "PRME"}
+🎯 SIGNAL FSP [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 0.4899, "stop_loss": 0.4578, "take_profit": 0.5542, "timestamp": "2026-08-19T16:00:00", "ticker": "FSP"}
+💾 Persisted BULLISH signal for DEI (1H)
+💾 Persisted BULLISH signal for PRME (4H)
+🎯 SIGNAL SERV [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 4.785, "stop_loss": 4.6776, "take_profit": 4.9998, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SERV"}
+🎯 SIGNAL SNWV [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 5.165, "stop_loss": 4.7474, "take_profit": 6.0002, "timestamp": "2026-08-19T16:00:00", "ticker": "SNWV"}
+💾 Persisted BULLISH signal for FSP (4H)
+💾 Persisted BULLISH signal for SERV (1H)
+💾 Persisted BULLISH signal for SNWV (4H)
+🎯 SIGNAL ORA [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 110.37, "stop_loss": 109.8648, "take_profit": 111.3804, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "ORA"}
+💾 Persisted BULLISH signal for ORA (15M)
+🎯 SIGNAL EML [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 24.945, "stop_loss": 24.4975, "take_profit": 25.8399, "timestamp": "2026-08-19T16:00:00", "ticker": "EML"}
+💾 Persisted BULLISH signal for EML (4H)
+🎯 SIGNAL RGR [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 38.25, "stop_loss": 36.9809, "take_profit": 40.7883, "timestamp": "2026-08-19T16:00:00", "ticker": "RGR"}
+💾 Persisted BULLISH signal for RGR (4H)
+🎯 SIGNAL LAKE [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.15, "stop_loss": 11.8339, "take_profit": 12.7821, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "LAKE"}
+💾 Persisted BULLISH signal for LAKE (15M)
+🎯 SIGNAL CPRT [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 33.86, "stop_loss": 33.5681, "take_profit": 34.4439, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CPRT"}
+🎯 SIGNAL HSIC [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 89.28, "stop_loss": 89.8796, "take_profit": 88.0807, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "HSIC"}
+💾 Persisted BULLISH signal for CPRT (15M)
+💾 Persisted BEARISH signal for HSIC (1H)
+🎯 SIGNAL MCHB [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 16.695, "stop_loss": 16.4667, "take_profit": 17.1517, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MCHB"}
+💾 Persisted BULLISH signal for MCHB (1H)
+🎯 SIGNAL FLNC [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.07, "stop_loss": 11.874, "take_profit": 12.4621, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "FLNC"}
+🎯 SIGNAL AI [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 10.38, "stop_loss": 10.0698, "take_profit": 11.0004, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AI"}
+💾 Persisted BULLISH signal for FLNC (15M)
+💾 Persisted BULLISH signal for AI (1H)
+🎯 SIGNAL APLD [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 28.245, "stop_loss": 27.5559, "take_profit": 29.6232, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "APLD"}
+💾 Persisted BULLISH signal for APLD (15M)
+🎯 SIGNAL MED [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 11.63, "stop_loss": 11.7458, "take_profit": 11.3984, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MED"}
+💾 Persisted BEARISH signal for MED (1H)
+🎯 SIGNAL TRN [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 29.62, "stop_loss": 29.3652, "take_profit": 30.1296, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "TRN"}
+💾 Persisted BULLISH signal for TRN (15M)
+🎯 SIGNAL SFIX [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 3.368, "stop_loss": 3.3333, "take_profit": 3.4374, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "SFIX"}
+🎯 SIGNAL ASST [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 14.725, "stop_loss": 14.1526, "take_profit": 15.8697, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ASST"}
+💾 Persisted BULLISH signal for SFIX (15M)
+💾 Persisted BULLISH signal for ASST (1H)
+🎯 SIGNAL ASST [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 14.725, "stop_loss": 14.4276, "take_profit": 15.3197, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "ASST"}
+🎯 SIGNAL MA [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 573.87, "stop_loss": 576.6469, "take_profit": 568.3161, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "MA"}
+💾 Persisted BULLISH signal for ASST (15M)
+🎯 SIGNAL SSRM [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 35.385, "stop_loss": 34.1643, "take_profit": 37.8264, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SSRM"}
+💾 Persisted BEARISH signal for MA (15M)
+💾 Persisted BULLISH signal for SSRM (1H)
+🎯 SIGNAL GLW [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 152.52, "stop_loss": 150.6237, "take_profit": 156.3125, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "GLW"}
+💾 Persisted BULLISH signal for GLW (15M)
+🎯 SIGNAL DX [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 13.34, "stop_loss": 13.2583, "take_profit": 13.5033, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "DX"}
+💾 Persisted BULLISH signal for DX (1H)
+🎯 SIGNAL PEBK [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 43.66, "stop_loss": 44.5318, "take_profit": 41.9163, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "PEBK"}
+💾 Persisted BEARISH signal for PEBK (1H)
+🎯 SIGNAL FLNG [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 32.5, "stop_loss": 30.9138, "take_profit": 35.6725, "timestamp": "2026-08-19T16:00:00", "ticker": "FLNG"}
+💾 Persisted BULLISH signal for FLNG (4H)
+🎯 SIGNAL AON [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 348.51, "stop_loss": 350.4742, "take_profit": 344.5815, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "AON"}
+💾 Persisted BEARISH signal for AON (15M)
+🎯 SIGNAL WY [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 24.62, "stop_loss": 24.4377, "take_profit": 24.9846, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "WY"}
+🎯 SIGNAL ADV [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 34.27, "stop_loss": 33.6029, "take_profit": 35.6043, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ADV"}
+💾 Persisted BULLISH signal for WY (15M)
+💾 Persisted BULLISH signal for ADV (1H)
+🎯 SIGNAL TRV [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 362.28, "stop_loss": 364.6511, "take_profit": 357.5377, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "TRV"}
+💾 Persisted BEARISH signal for TRV (15M)
+🎯 SIGNAL HNRG [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 16.39, "stop_loss": 15.8418, "take_profit": 17.4864, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "HNRG"}
+🎯 SIGNAL AMN [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 35.32, "stop_loss": 34.0223, "take_profit": 37.9153, "timestamp": "2026-08-19T16:00:00", "ticker": "AMN"}
+💾 Persisted BULLISH signal for HNRG (1H)
+💾 Persisted BULLISH signal for AMN (4H)
+🎯 SIGNAL LRMR [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 4.25, "stop_loss": 4.1779, "take_profit": 4.3943, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "LRMR"}
+💾 Persisted BULLISH signal for LRMR (1H)
+🎯 SIGNAL PGNY [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 25.54, "stop_loss": 25.7828, "take_profit": 25.0545, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "PGNY"}
+💾 Persisted BEARISH signal for PGNY (1H)
+🎯 SIGNAL PGNY [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 25.54, "stop_loss": 25.6928, "take_profit": 25.2345, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "PGNY"}
+💾 Persisted BEARISH signal for PGNY (15M)
+🎯 SIGNAL IRTC [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 124.76, "stop_loss": 122.7476, "take_profit": 128.7848, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "IRTC"}
+💾 Persisted BULLISH signal for IRTC (15M)
+🎯 SIGNAL WRLD [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 184.62, "stop_loss": 191.4973, "take_profit": 170.8654, "timestamp": "2026-08-19T16:00:00", "ticker": "WRLD"}
+🎯 SIGNAL LUNR [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 18.515, "stop_loss": 17.9457, "take_profit": 19.6535, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "LUNR"}
+💾 Persisted BEARISH signal for WRLD (4H)
+💾 Persisted BULLISH signal for LUNR (15M)
+🎯 SIGNAL BKD [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.105, "stop_loss": 12.226, "take_profit": 11.8631, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "BKD"}
+💾 Persisted BEARISH signal for BKD (15M)
+🎯 SIGNAL XNCR [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 27.54, "stop_loss": 26.5962, "take_profit": 29.4275, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "XNCR"}
+💾 Persisted BULLISH signal for XNCR (1H)
+🎯 SIGNAL PRTA [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 9.29, "stop_loss": 8.5854, "take_profit": 10.6993, "timestamp": "2026-08-19T16:00:00", "ticker": "PRTA"}
+💾 Persisted BULLISH signal for PRTA (4H)
+🎯 SIGNAL EVGO [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 1.54, "stop_loss": 1.5092, "take_profit": 1.6015, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "EVGO"}
+💾 Persisted BULLISH signal for EVGO (1H)
+🎯 SIGNAL RVSB [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 5.11, "stop_loss": 5.0449, "take_profit": 5.2401, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "RVSB"}
+💾 Persisted BULLISH signal for RVSB (15M)
+🎯 SIGNAL CORZ [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 18.71, "stop_loss": 18.4906, "take_profit": 19.1487, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CORZ"}
+💾 Persisted BULLISH signal for CORZ (15M)
+🎯 SIGNAL CWCO [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 29.725, "stop_loss": 30.4549, "take_profit": 28.2653, "timestamp": "2026-08-19T16:00:00", "ticker": "CWCO"}
+💾 Persisted BEARISH signal for CWCO (4H)
+🎯 SIGNAL AXGN [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 48.94, "stop_loss": 50.1445, "take_profit": 46.5311, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AXGN"}
+🎯 SIGNAL AVGO [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 362.48, "stop_loss": 365.3912, "take_profit": 356.6576, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "AVGO"}
+💾 Persisted BEARISH signal for AXGN (1H)
+💾 Persisted BEARISH signal for AVGO (15M)
+🎯 SIGNAL CLW [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 21.16, "stop_loss": 21.4206, "take_profit": 20.6388, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "CLW"}
+🎯 SIGNAL GPOR [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 173.15, "stop_loss": 174.7566, "take_profit": 169.9368, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "GPOR"}
+🎯 SIGNAL HSY [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 188.82, "stop_loss": 189.8944, "take_profit": 186.6712, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "HSY"}
+💾 Persisted BEARISH signal for CLW (1H)
+💾 Persisted BEARISH signal for GPOR (1H)
+💾 Persisted BEARISH signal for HSY (15M)
+🎯 SIGNAL VECO [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 47.42, "stop_loss": 48.1887, "take_profit": 45.8826, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "VECO"}
+💾 Persisted BEARISH signal for VECO (1H)
+🎯 SIGNAL SATL [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 5.53, "stop_loss": 5.9528, "take_profit": 4.6845, "timestamp": "2026-08-19T16:00:00", "ticker": "SATL"}
+💾 Persisted BEARISH signal for SATL (4H)
+🎯 SIGNAL AIR [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 139.13, "stop_loss": 144.6496, "take_profit": 128.0909, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AIR"}
+💾 Persisted BEARISH signal for AIR (1H)
+🎯 SIGNAL ABR [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 5.17, "stop_loss": 5.1174, "take_profit": 5.2752, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "ABR"}
+💾 Persisted BULLISH signal for ABR (15M)
+🎯 SIGNAL MGPI [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 18.066, "stop_loss": 17.371, "take_profit": 19.4561, "timestamp": "2026-08-19T16:00:00", "ticker": "MGPI"}
+💾 Persisted BULLISH signal for MGPI (4H)
+🎯 SIGNAL EQBK [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 49.88, "stop_loss": 50.1949, "take_profit": 49.2501, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "EQBK"}
+💾 Persisted BEARISH signal for EQBK (15M)
+🎯 SIGNAL AVXL [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.4, "stop_loss": 3.1083, "take_profit": 3.9834, "timestamp": "2026-08-19T16:00:00", "ticker": "AVXL"}
+🎯 SIGNAL BAX [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 26.665, "stop_loss": 25.7367, "take_profit": 28.5217, "timestamp": "2026-08-19T16:00:00", "ticker": "BAX"}
+💾 Persisted BULLISH signal for AVXL (4H)
+💾 Persisted BULLISH signal for BAX (4H)
+🎯 SIGNAL EXTR [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 22.78, "stop_loss": 23.5964, "take_profit": 21.1472, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "EXTR"}
+💾 Persisted BEARISH signal for EXTR (1H)
+🎯 SIGNAL UVE [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 42.22, "stop_loss": 42.7011, "take_profit": 41.2578, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "UVE"}
+💾 Persisted BEARISH signal for UVE (15M)
+🎯 SIGNAL CRGY [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 13.425, "stop_loss": 12.7683, "take_profit": 14.7384, "timestamp": "2026-08-19T16:00:00", "ticker": "CRGY"}
+💾 Persisted BULLISH signal for CRGY (4H)
+🎯 SIGNAL WSM [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 242.31, "stop_loss": 240.3188, "take_profit": 246.2923, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "WSM"}
+💾 Persisted BULLISH signal for WSM (15M)
+🎯 SIGNAL TRVI [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 18.81, "stop_loss": 18.5506, "take_profit": 19.3288, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "TRVI"}
+🎯 SIGNAL MLAB [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 119.85, "stop_loss": 116.9801, "take_profit": 125.5898, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MLAB"}
+💾 Persisted BULLISH signal for TRVI (15M)
+💾 Persisted BULLISH signal for MLAB (1H)
+🎯 SIGNAL CRM [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 206.1, "stop_loss": 207.758, "take_profit": 202.7839, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CRM"}
+💾 Persisted BEARISH signal for CRM (15M)
+🎯 SIGNAL GKOS [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 189.5, "stop_loss": 182.9103, "take_profit": 202.6795, "timestamp": "2026-08-19T16:00:00", "ticker": "GKOS"}
+💾 Persisted BULLISH signal for GKOS (4H)
+🎯 SIGNAL OMER [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 18.385, "stop_loss": 18.8692, "take_profit": 17.4166, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "OMER"}
+💾 Persisted BEARISH signal for OMER (1H)
+🎯 SIGNAL ABSI [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 10.0, "stop_loss": 8.62, "take_profit": 12.76, "timestamp": "2026-08-19T16:00:00", "ticker": "ABSI"}
+🎯 SIGNAL PSIX [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 37.39, "stop_loss": 36.5113, "take_profit": 39.1474, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "PSIX"}
+🎯 SIGNAL MTUS [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 20.24, "stop_loss": 21.0651, "take_profit": 18.5898, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MTUS"}
+💾 Persisted BULLISH signal for ABSI (4H)
+💾 Persisted BULLISH signal for PSIX (15M)
+💾 Persisted BEARISH signal for MTUS (1H)
+🎯 SIGNAL LII [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 419.57, "stop_loss": 415.4802, "take_profit": 427.7496, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "LII"}
+💾 Persisted BULLISH signal for LII (15M)
+🎯 SIGNAL NI [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 41.635, "stop_loss": 42.0158, "take_profit": 40.8734, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "NI"}
+💾 Persisted BEARISH signal for NI (1H)
+🎯 SIGNAL SBH [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 16.74, "stop_loss": 16.2916, "take_profit": 17.6367, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SBH"}
+🎯 SIGNAL CAH [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 234.85, "stop_loss": 237.6374, "take_profit": 229.2752, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CAH"}
+💾 Persisted BULLISH signal for SBH (1H)
+💾 Persisted BEARISH signal for CAH (15M)
+🎯 SIGNAL GRMN [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 295.7, "stop_loss": 298.9828, "take_profit": 289.1344, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "GRMN"}
+💾 Persisted BEARISH signal for GRMN (15M)
+🎯 SIGNAL ADP [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 277.23, "stop_loss": 278.4886, "take_profit": 274.7128, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "ADP"}
+🎯 SIGNAL ACTG [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 4.545, "stop_loss": 4.6323, "take_profit": 4.3705, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ACTG"}
+💾 Persisted BEARISH signal for ADP (15M)
+🎯 SIGNAL NXRT [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 24.11, "stop_loss": 23.8979, "take_profit": 24.5341, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "NXRT"}
+💾 Persisted BEARISH signal for ACTG (1H)
+💾 Persisted BULLISH signal for NXRT (15M)
+🎯 SIGNAL ENSG [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 182.53, "stop_loss": 183.8113, "take_profit": 179.9675, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ENSG"}
+💾 Persisted BEARISH signal for ENSG (1H)
+🎯 SIGNAL ECHO [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 88.43, "stop_loss": 92.0141, "take_profit": 81.2618, "timestamp": "2026-08-19T16:00:00", "ticker": "ECHO"}
+🎯 SIGNAL SANA [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 4.095, "stop_loss": 3.608, "take_profit": 5.0691, "timestamp": "2026-08-19T16:00:00", "ticker": "SANA"}
+💾 Persisted BEARISH signal for ECHO (4H)
+🎯 SIGNAL NTAP [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 194.49, "stop_loss": 197.2172, "take_profit": 189.0355, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "NTAP"}
+💾 Persisted BULLISH signal for SANA (4H)
+💾 Persisted BEARISH signal for NTAP (15M)
+🎯 SIGNAL SANA [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 4.095, "stop_loss": 3.9281, "take_profit": 4.4289, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SANA"}
+🎯 SIGNAL CLBK [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 11.72, "stop_loss": 11.5591, "take_profit": 12.0417, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CLBK"}
+🎯 SIGNAL HIG [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 137.54, "stop_loss": 138.6738, "take_profit": 135.2724, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "HIG"}
+💾 Persisted BULLISH signal for SANA (1H)
+💾 Persisted BULLISH signal for CLBK (15M)
+💾 Persisted BEARISH signal for HIG (15M)
+🎯 SIGNAL PINE [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 19.79, "stop_loss": 19.6213, "take_profit": 20.1274, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "PINE"}
+💾 Persisted BULLISH signal for PINE (1H)
+🎯 SIGNAL RXRX [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.495, "stop_loss": 2.9283, "take_profit": 4.6285, "timestamp": "2026-08-19T16:00:00", "ticker": "RXRX"}
+💾 Persisted BULLISH signal for RXRX (4H)
+🎯 SIGNAL SRE [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 85.58, "stop_loss": 86.3128, "take_profit": 84.1144, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "SRE"}
+💾 Persisted BEARISH signal for SRE (1H)
+🎯 SIGNAL STC [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 68.9, "stop_loss": 69.2945, "take_profit": 68.1111, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "STC"}
+💾 Persisted BEARISH signal for STC (15M)
+🎯 SIGNAL NAVI [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 9.265, "stop_loss": 9.1204, "take_profit": 9.5543, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "NAVI"}
+💾 Persisted BULLISH signal for NAVI (1H)
+🎯 SIGNAL SHLS [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 7.955, "stop_loss": 7.771, "take_profit": 8.323, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "SHLS"}
+💾 Persisted BULLISH signal for SHLS (15M)
+🎯 SIGNAL AIP [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 24.83, "stop_loss": 25.2424, "take_profit": 24.0052, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AIP"}
+💾 Persisted BEARISH signal for AIP (1H)
+🎯 SIGNAL ELV [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 398.49, "stop_loss": 403.0692, "take_profit": 389.3315, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ELV"}
+🎯 SIGNAL NOVT [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 145.83, "stop_loss": 149.0979, "take_profit": 139.2942, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "NOVT"}
+💾 Persisted BEARISH signal for ELV (1H)
+💾 Persisted BEARISH signal for NOVT (15M)
+🎯 SIGNAL UPWK [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 8.71, "stop_loss": 8.7994, "take_profit": 8.5313, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "UPWK"}
+💾 Persisted BEARISH signal for UPWK (15M)
+🎯 SIGNAL APPS [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 11.23, "stop_loss": 12.3956, "take_profit": 8.8988, "timestamp": "2026-08-19T16:00:00", "ticker": "APPS"}
+💾 Persisted BEARISH signal for APPS (4H)
+🎯 SIGNAL SLDP [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 2.33, "stop_loss": 2.2488, "take_profit": 2.4923, "timestamp": "2026-08-19T16:00:00", "ticker": "SLDP"}
+🎯 SIGNAL MRVI [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 7.225, "stop_loss": 5.5964, "take_profit": 10.4822, "timestamp": "2026-08-19T16:00:00", "ticker": "MRVI"}
+💾 Persisted BULLISH signal for SLDP (4H)
+💾 Persisted BULLISH signal for MRVI (4H)
+🎯 SIGNAL MRVI [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 7.225, "stop_loss": 6.9464, "take_profit": 7.7822, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "MRVI"}
+💾 Persisted BULLISH signal for MRVI (1H)
+🎯 SIGNAL AGYS [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 116.88, "stop_loss": 115.1816, "take_profit": 120.2769, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "AGYS"}
+🎯 SIGNAL ARR [1H]: {"direction": "BULLISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 16.49, "stop_loss": 16.3568, "take_profit": 16.7565, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "ARR"}
+💾 Persisted BULLISH signal for AGYS (1H)
+💾 Persisted BULLISH signal for ARR (1H)
+🎯 SIGNAL CSCO [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 110.56, "stop_loss": 112.1153, "take_profit": 107.4494, "timestamp": "2026-08-19T15:30:00-04:00", "ticker": "CSCO"}
+💾 Persisted BEARISH signal for CSCO (1H)
+🎯 SIGNAL CSCO [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 110.56, "stop_loss": 111.9053, "take_profit": 107.8694, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "CSCO"}
+💾 Persisted BEARISH signal for CSCO (15M)
+🎯 SIGNAL SWIM [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 7.185, "stop_loss": 6.8314, "take_profit": 7.8922, "timestamp": "2026-08-19T16:00:00", "ticker": "SWIM"}
+💾 Persisted BULLISH signal for SWIM (4H)
+🎯 SIGNAL MARA [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 9.655, "stop_loss": 9.3852, "take_profit": 10.1947, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "MARA"}
+🎯 SIGNAL WGO [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 32.87, "stop_loss": 32.4136, "take_profit": 33.7829, "timestamp": "2026-08-19T15:45:00-04:00", "ticker": "WGO"}
+💾 Persisted BULLISH signal for MARA (15M)
+🎯 SIGNAL BKH [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 73.17, "stop_loss": 73.9766, "take_profit": 71.5568, "timestamp": "2026-08-19T16:00:00", "ticker": "BKH"}
+💾 Persisted BULLISH signal for WGO (15M)
+💾 Persisted BEARISH signal for BKH (4H)
+Pipeline: no_data=6 | no_pattern=661 | signals=124 | total_rows=131
+✅ Completato. Segnali trovati: 131
+🚀 3C Wick Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+📡 Caricamento Russell 2000...
+   Russell 2000 (iShares): Risposta HTML invece di CSV (iShares ha bloccato il download)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 0 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2456 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $3M): 1253
+🎯 SIGNAL COMP [15M]: {"direction": "BULLISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 12.795, "stop_loss": 12.5736, "take_profit": 13.2378, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 12.6986, "swept_level": 12.58, "structure_level": 12.63, "ticker": "COMP"}
+💾 Persisted BULLISH signal for COMP (15M)
+🎯 SIGNAL RXRX [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.495, "stop_loss": 2.9283, "take_profit": 4.6285, "timestamp": "2026-08-19T16:00:00", "ema_20": 3.2163, "swept_level": 2.92, "structure_level": 3.01, "ticker": "RXRX"}
+💾 Persisted BULLISH signal for RXRX (4H)
+🎯 SIGNAL CNK [1H]: {"direction": "BEARISH", "timeframe": "1H", "pattern_candles": [{"time": 1787160600, "index": "C1"}, {"time": 1787164200, "index": "C2"}, {"time": 1787167800, "index": "C3"}], "entry_price": 37.32, "stop_loss": 37.8637, "take_profit": 36.2327, "timestamp": "2026-08-19T15:30:00-04:00", "ema_20": 37.3732, "swept_level": 37.845, "structure_level": 37.8, "ticker": "CNK"}
+💾 Persisted BEARISH signal for CNK (1H)
+🎯 SIGNAL CAH [15M]: {"direction": "BEARISH", "timeframe": "15M", "pattern_candles": [{"time": 1787166900, "index": "C1"}, {"time": 1787167800, "index": "C2"}, {"time": 1787168700, "index": "C3"}], "entry_price": 234.85, "stop_loss": 237.6374, "take_profit": 229.2752, "timestamp": "2026-08-19T15:45:00-04:00", "ema_20": 235.6816, "swept_level": 237.7, "structure_level": 237.21, "ticker": "CAH"}
+💾 Persisted BEARISH signal for CAH (15M)
+🎯 SIGNAL LMT [4H]: {"direction": "BEARISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 589.44, "stop_loss": 613.0452, "take_profit": 542.2296, "timestamp": "2026-08-19T16:00:00", "ema_20": 595.2881, "swept_level": 612.7505, "structure_level": 610.36, "ticker": "LMT"}
+💾 Persisted BEARISH signal for LMT (4H)
+🎯 SIGNAL CSTL [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 32.38, "stop_loss": 28.7038, "take_profit": 39.7324, "timestamp": "2026-08-19T16:00:00", "ema_20": 30.3984, "swept_level": 28.72, "structure_level": 29.21, "ticker": "CSTL"}
+💾 Persisted BULLISH signal for CSTL (4H)
+🎯 SIGNAL RCKT [4H]: {"direction": "BULLISH", "timeframe": "4H", "pattern_candles": [{"time": 1787068800, "index": "C1"}, {"time": 1787140800, "index": "C2"}, {"time": 1787155200, "index": "C3"}], "entry_price": 3.655, "stop_loss": 3.2682, "take_profit": 4.4287, "timestamp": "2026-08-19T16:00:00", "ema_20": 3.4397, "swept_level": 3.27, "structure_level": 3.275, "ticker": "RCKT"}
+💾 Persisted BULLISH signal for RCKT (4H)
+Pipeline: no_data=312 | no_pattern=934 | signals=7 | total_rows=7
+✅ Completato. Segnali trovati: 7
