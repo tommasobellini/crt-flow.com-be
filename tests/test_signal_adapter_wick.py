@@ -1,22 +1,23 @@
 
-def test_signal_adapter_wick_3c():
+def test_signal_adapter_liq_sweep():
     from signal_adapter import signal_to_crt_row
 
     signal = {
-        "direction": "BULLISH",
-        "timeframe": "1H",
-        "entry_price": 100.0,
-        "stop_loss": 98.0,
-        "take_profit": 104.0,
+        "direction": "BEARISH",
+        "timeframe": "5M",
+        "entry_price": 50.0,
+        "stop_loss": 51.0,
+        "take_profit": 47.0,
+        "timestamp": "2026-03-01T14:30:00+00:00",
         "pattern_candles": [
-            {"time": 1704067200, "index": "C1"},
-            {"time": 1704070800, "index": "C2"},
-            {"time": 1704074400, "index": "C3"},
+            {"time": 1709303400, "index": "SWEEP"},
+            {"time": 1709305200, "index": "MSS"},
+            {"time": 1709304000, "index": "OB"},
         ],
+        "pattern_levels": {"setup": "LIQUIDITY_SWEEP_SHORT", "fibo_71": 50.0},
     }
-    row = signal_to_crt_row(signal, ticker="AAPL")
-    assert row["type"] == "bullish_wick_3c"
-    assert row["symbol"] == "AAPL"
-    assert row["timeframe"] == "1H"
-    assert row["subtype"] == "3C SMC"
-    assert len(row["pattern_candles"]) == 3
+    row = signal_to_crt_row(signal, ticker="META")
+    assert row["type"] == "bearish_liq_sweep"
+    assert row["subtype"] == "LIQ SWEEP"
+    assert row["timeframe"] == "5M"
+    assert row["pattern_levels"]["setup"] == "LIQUIDITY_SWEEP_SHORT"

@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 from market_data import fetch_mtf_frames
-from strategy.wick_retrace_3c import detect_latest_pattern
-from strategy.config import MIN_BARS_4H, MIN_BARS_1H, MIN_BARS_15M
+from strategy.liquidity_sweep import combined_bias, detect_latest_pattern
+from strategy.config import MIN_BARS_5M, MIN_BARS_15M, MIN_MARKET_CAP
 from signal_adapter import signal_to_crt_row
 
 # --- LOGGING ---
@@ -28,7 +28,7 @@ class SupabaseLoggingHandler(logging.Handler):
     def __init__(self, supabase_client):
         super().__init__()
         self.supabase = supabase_client
-        self.source = "scanner_wick_3c_engine"
+        self.source = "scanner_liq_sweep_engine"
 
     def emit(self, record):
         try:
@@ -163,26 +163,102 @@ def get_nasdaq100_tickers():
     return fallback
 
 
-def _persist_signal_row(row: dict) -> None:
-    """Insert crt_signals row; retry without market_cap if column missing (PGRST204)."""
+def _is_open_result(result: str | None) -> bool:
+    return result is None or str(result).upper() in ("OPEN", "")
+
+
+def _signal_already_exists(row: dict) -> bool:
+    """Skip insert if same pattern or another open signal exists for symbol/tf/type."""
     assert supabase is not None
+    symbol = row["symbol"]
+    timeframe = row["timeframe"]
+    sig_type = row["type"]
+    pattern_at = row.get("pattern_at")
+
+    if pattern_at:
+        dup = (
+            supabase.table("crt_signals")
+            .select("id")
+            .eq("symbol", symbol)
+            .eq("timeframe", timeframe)
+            .eq("type", sig_type)
+            .eq("pattern_at", pattern_at)
+            .limit(1)
+            .execute()
+        )
+        if dup.data:
+            logger.info(
+                f"⏭️  Skip duplicate pattern {symbol} {timeframe} {sig_type} @ {pattern_at}"
+            )
+            return True
+
+    open_rows = (
+        supabase.table("crt_signals")
+        .select("id, result")
+        .eq("symbol", symbol)
+        .eq("timeframe", timeframe)
+        .eq("type", sig_type)
+        .eq("is_active", True)
+        .execute()
+    )
+    for existing in open_rows.data or []:
+        if _is_open_result(existing.get("result")):
+            logger.info(
+                f"⏭️  Skip open signal already exists for {symbol} {timeframe} {sig_type}"
+            )
+            return True
+    return False
+
+
+def _persist_signal_row(row: dict) -> None:
+    """Insert crt_signals row with dedup; retry without market_cap if column missing."""
+    assert supabase is not None
+    if _signal_already_exists(row):
+        return
     try:
         supabase.table("crt_signals").insert(row).execute()
         return
     except Exception as e:
         code = getattr(e, "code", None)
         err = str(e)
-        missing_mcap = code == "PGRST204" or (
-            "market_cap" in err and ("PGRST204" in err or "schema cache" in err)
-        )
-        if missing_mcap and "market_cap" in row:
-            stripped = {k: v for k, v in row.items() if k != "market_cap"}
-            logger.warning(
-                "crt_signals.market_cap missing in schema cache — "
-                "retrying insert without it (run migration + Reload schema)"
+        if code == "23505" or "duplicate key" in err.lower():
+            logger.info(
+                f"⏭️  Skip duplicate (unique index) {row.get('symbol')} "
+                f"{row.get('timeframe')} {row.get('type')}"
             )
-            supabase.table("crt_signals").insert(stripped).execute()
             return
+        missing_col = code == "PGRST204" or "PGRST204" in err or "schema cache" in err
+        if missing_col:
+            stripped = dict(row)
+            for optional in ("market_cap", "pattern_levels", "pattern_at"):
+                if optional in err and optional in stripped:
+                    stripped.pop(optional, None)
+                    logger.warning(
+                        f"crt_signals.{optional} missing in schema cache — "
+                        "retrying insert without it"
+                    )
+            if stripped != row:
+                if _signal_already_exists(stripped):
+                    return
+                try:
+                    supabase.table("crt_signals").insert(stripped).execute()
+                except Exception as e2:
+                    if getattr(e2, "code", None) == "23505" or "duplicate key" in str(e2).lower():
+                        logger.info(
+                            f"⏭️  Skip duplicate (unique index) {row.get('symbol')}"
+                        )
+                        return
+                    # Last resort: strip both optional jsonb/market columns
+                    stripped2 = {
+                        k: v
+                        for k, v in stripped.items()
+                        if k not in ("market_cap", "pattern_levels")
+                    }
+                    if stripped2 != stripped:
+                        supabase.table("crt_signals").insert(stripped2).execute()
+                        return
+                    raise
+                return
         raise
 
 
@@ -256,7 +332,7 @@ def check_mcap(ticker: str) -> str | None:
             if hasattr(ticker_obj, "fast_info")
             else 0
         )
-        return ticker if mcap >= 3_000_000 else None
+        return ticker if mcap >= MIN_MARKET_CAP else None
     except Exception:
         return None
 
@@ -280,12 +356,18 @@ def get_market_cap(ticker: str) -> int | None:
 
 
 def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
-    df_4h, df_1h, df_15m = fetch_mtf_frames(ticker)
+    df_4h, df_1h, df_15m, df_5m = fetch_mtf_frames(ticker)
 
-    frames: list[tuple[str, pd.DataFrame | None, int]] = [
-        ("4H", df_4h, MIN_BARS_4H),
-        ("1H", df_1h, MIN_BARS_1H),
+    if df_4h is None or df_1h is None:
+        return [], "no_data", 0
+
+    bias = combined_bias(df_4h, df_1h)
+    if bias is None:
+        return [], "no_pattern", 0
+
+    frames: list[tuple[str, object, int]] = [
         ("15M", df_15m, MIN_BARS_15M),
+        ("5M", df_5m, MIN_BARS_5M),
     ]
 
     if all(f is None or len(f) < min_b for _, f, min_b in frames):
@@ -295,7 +377,13 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     for tf_label, df, min_bars in frames:
         if df is None or len(df) < min_bars:
             continue
-        pattern = detect_latest_pattern(df, tf_label)  # type: ignore[arg-type]
+        pattern = detect_latest_pattern(
+            df,
+            tf_label,  # type: ignore[arg-type]
+            bias=bias,
+            df_4h=df_4h,
+            df_1h=df_1h,
+        )
         if pattern is not None:
             pattern["ticker"] = ticker
             signals.append(pattern)
@@ -329,7 +417,7 @@ def main():
     setup_logging()
     setup_supabase()
 
-    parser = argparse.ArgumentParser(description="CRT Flow 3C Wick Scanner")
+    parser = argparse.ArgumentParser(description="CRT Flow Liquidity Sweep Scanner")
     parser.add_argument(
         "--index",
         type=str,
@@ -338,9 +426,14 @@ def main():
         help="Universe: us = S&P 500 + NASDAQ 100 (default), all = us + Russell 2000",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Solo log JSON, non salva su Supabase",
+    )
+    parser.add_argument(
         "--persist",
         action="store_true",
-        help="Salva segnali su Supabase (default: dry-run, solo log JSON)",
+        help="Deprecated: persist is the default (kept for CI compat)",
     )
     parser.add_argument(
         "--symbol",
@@ -355,6 +448,7 @@ def main():
         help="Thread pool size per download/analisi",
     )
     args = parser.parse_args()
+    persist = not args.dry_run
 
     if sys.platform.startswith("win"):
         try:
@@ -362,8 +456,8 @@ def main():
         except Exception:
             pass
 
-    mode = "PERSIST" if args.persist else "DRY-RUN"
-    logger.info(f"🚀 3C Wick Scanner ({mode})")
+    mode = "DRY-RUN" if args.dry_run else "PERSIST"
+    logger.info(f"🚀 Liquidity Sweep Scanner ({mode})")
 
     if args.symbol:
         tickers = [args.symbol.upper()]
@@ -397,12 +491,15 @@ def main():
 
         logger.info("Filtro Market Cap in corso...")
         filtered: list[str] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        # Keep mcap workers low — Yahoo rate-limits hard on --index all (~2.5k tickers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             for res in executor.map(check_mcap, tickers):
                 if res:
                     filtered.append(res)
         tickers = filtered
-        logger.info(f"Ticker post M-Cap (>= $3M): {len(tickers)}")
+        logger.info(f"Ticker post M-Cap (>= $10B): {len(tickers)}")
+        # Cooldown so the history phase is less likely to get empty responses
+        time.sleep(8)
 
     if not tickers:
         logger.info("Nessun ticker da scansionare.")
@@ -416,7 +513,7 @@ def main():
     }
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(scan_ticker, t, args.persist): t for t in tickers
+            executor.submit(scan_ticker, t, persist): t for t in tickers
         }
         for future in concurrent.futures.as_completed(futures):
             ticker = futures[future]

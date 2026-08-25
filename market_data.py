@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import yfinance as yf
 
-from strategy.config import MIN_BARS_15M, MIN_BARS_1H, MIN_BARS_4H, YF_PERIOD_1H, YF_PERIOD_15M
+from strategy.config import (
+    MIN_BARS_15M,
+    MIN_BARS_1H,
+    MIN_BARS_4H,
+    MIN_BARS_5M,
+    YF_PERIOD_15M,
+    YF_PERIOD_1H,
+    YF_PERIOD_5M,
+)
 
 _OHLCV_NAMES = frozenset({"open", "high", "low", "close", "volume", "adj close"})
+_YF_RETRIES = 3
+_YF_BACKOFF_SEC = 1.5
 
 
 def _flatten_yf_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -68,24 +80,56 @@ def resample_to_4h(df_1h: pd.DataFrame) -> pd.DataFrame:
     return df.resample("4h").agg(agg).dropna()
 
 
-def fetch_mtf_frames(ticker: str) -> tuple[pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None]:
+def _history_with_retry(
+    stock: yf.Ticker, *, period: str, interval: str
+) -> pd.DataFrame | None:
+    last: pd.DataFrame | None = None
+    for attempt in range(_YF_RETRIES):
+        try:
+            last = stock.history(period=period, interval=interval, auto_adjust=True)
+            if last is not None and not last.empty:
+                return last
+        except Exception:
+            last = None
+        if attempt < _YF_RETRIES - 1:
+            time.sleep(_YF_BACKOFF_SEC * (attempt + 1))
+    return last
+
+
+def fetch_mtf_frames(
+    ticker: str,
+) -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+]:
+    """Return (4H, 1H, 15M, 5M) frames for Liquidity Sweep scanning."""
     try:
         stock = yf.Ticker(ticker)
-        df_1h = stock.history(period=YF_PERIOD_1H, interval="1h", auto_adjust=True)
-        df_15m = stock.history(period=YF_PERIOD_15M, interval="15m", auto_adjust=True)
+        df_1h = _history_with_retry(stock, period=YF_PERIOD_1H, interval="1h")
+        df_15m = _history_with_retry(stock, period=YF_PERIOD_15M, interval="15m")
+        df_5m = _history_with_retry(stock, period=YF_PERIOD_5M, interval="5m")
     except Exception:
-        return None, None, None
+        return None, None, None, None
 
     df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
     df_15m = clean_df(df_15m.dropna() if df_15m is not None else None)
+    df_5m = clean_df(df_5m.dropna() if df_5m is not None else None)
 
     if df_1h is None or df_1h.empty or len(df_1h) < MIN_BARS_1H:
-        return None, None, None
-    if df_15m is None or df_15m.empty or len(df_15m) < MIN_BARS_15M:
-        return None, None, None
+        return None, None, None, None
 
     df_4h = resample_to_4h(df_1h)
     if df_4h.empty or len(df_4h) < MIN_BARS_4H:
-        return None, None, None
+        return None, None, None, None
 
-    return df_4h, df_1h, df_15m
+    if df_15m is not None and (df_15m.empty or len(df_15m) < MIN_BARS_15M):
+        df_15m = None
+    if df_5m is not None and (df_5m.empty or len(df_5m) < MIN_BARS_5M):
+        df_5m = None
+
+    if df_15m is None and df_5m is None:
+        return None, None, None, None
+
+    return df_4h, df_1h, df_15m, df_5m
