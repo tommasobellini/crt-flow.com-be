@@ -176,21 +176,25 @@ def _signal_already_exists(row: dict) -> bool:
     pattern_at = row.get("pattern_at")
 
     if pattern_at:
-        dup = (
-            supabase.table("crt_signals")
-            .select("id")
-            .eq("symbol", symbol)
-            .eq("timeframe", timeframe)
-            .eq("type", sig_type)
-            .eq("pattern_at", pattern_at)
-            .limit(1)
-            .execute()
-        )
-        if dup.data:
-            logger.info(
-                f"⏭️  Skip duplicate pattern {symbol} {timeframe} {sig_type} @ {pattern_at}"
+        try:
+            dup = (
+                supabase.table("crt_signals")
+                .select("id")
+                .eq("symbol", symbol)
+                .eq("timeframe", timeframe)
+                .eq("type", sig_type)
+                .eq("pattern_at", pattern_at)
+                .limit(1)
+                .execute()
             )
-            return True
+            if dup.data:
+                logger.info(
+                    f"⏭️  Skip duplicate pattern {symbol} {timeframe} {sig_type} @ {pattern_at}"
+                )
+                return True
+        except Exception as e:
+            if getattr(e, "code", None) not in ("42703", "PGRST204") and "does not exist" not in str(e).lower():
+                raise
 
     open_rows = (
         supabase.table("crt_signals")
@@ -210,8 +214,26 @@ def _signal_already_exists(row: dict) -> bool:
     return False
 
 
+def _strip_missing_optional_columns(row: dict, err: str) -> dict | None:
+    """Remove optional columns referenced in a missing-column error."""
+    optional = ("market_cap", "pattern_levels", "pattern_at")
+    stripped = dict(row)
+    changed = False
+    err_lower = err.lower()
+    for col in optional:
+        if col not in stripped:
+            continue
+        if col in err or col in err_lower:
+            stripped.pop(col)
+            changed = True
+            logger.warning(
+                f"crt_signals.{col} missing in DB — retrying insert without it"
+            )
+    return stripped if changed else None
+
+
 def _persist_signal_row(row: dict) -> None:
-    """Insert crt_signals row with dedup; retry without market_cap if column missing."""
+    """Insert crt_signals row with dedup; retry without optional cols if missing."""
     assert supabase is not None
     if _signal_already_exists(row):
         return
@@ -227,38 +249,34 @@ def _persist_signal_row(row: dict) -> None:
                 f"{row.get('timeframe')} {row.get('type')}"
             )
             return
-        missing_col = code == "PGRST204" or "PGRST204" in err or "schema cache" in err
+        missing_col = (
+            code in ("PGRST204", "42703")
+            or "PGRST204" in err
+            or "schema cache" in err
+            or "does not exist" in err.lower()
+        )
         if missing_col:
-            stripped = dict(row)
-            for optional in ("market_cap", "pattern_levels", "pattern_at"):
-                if optional in err and optional in stripped:
-                    stripped.pop(optional, None)
-                    logger.warning(
-                        f"crt_signals.{optional} missing in schema cache — "
-                        "retrying insert without it"
-                    )
-            if stripped != row:
+            stripped = _strip_missing_optional_columns(row, err)
+            if stripped is not None:
                 if _signal_already_exists(stripped):
                     return
                 try:
                     supabase.table("crt_signals").insert(stripped).execute()
+                    return
                 except Exception as e2:
                     if getattr(e2, "code", None) == "23505" or "duplicate key" in str(e2).lower():
                         logger.info(
                             f"⏭️  Skip duplicate (unique index) {row.get('symbol')}"
                         )
                         return
-                    # Last resort: strip both optional jsonb/market columns
-                    stripped2 = {
-                        k: v
-                        for k, v in stripped.items()
-                        if k not in ("market_cap", "pattern_levels")
-                    }
-                    if stripped2 != stripped:
+                    err2 = str(e2)
+                    stripped2 = _strip_missing_optional_columns(stripped, err2)
+                    if stripped2 is not None and stripped2 != stripped:
+                        if _signal_already_exists(stripped2):
+                            return
                         supabase.table("crt_signals").insert(stripped2).execute()
                         return
                     raise
-                return
         raise
 
 
