@@ -22,7 +22,12 @@ from market_data import clean_df
 
 logger = logging.getLogger(__name__)
 
-LIQ_SWEEP_TYPES = ("bullish_liq_sweep", "bearish_liq_sweep")
+SWEEP_ENGULF_TYPES = (
+    "bullish_sweep_engulf",
+    "bearish_sweep_engulf",
+    "bullish_liq_sweep",
+    "bearish_liq_sweep",
+)
 
 TF_INTERVAL: dict[str, str] = {
     "5M": "5m",
@@ -38,7 +43,7 @@ TF_INTERVAL: dict[str, str] = {
 TF_PERIOD: dict[str, str] = {
     "5m": "30d",
     "15m": "60d",
-    "1h": "60d",
+    "1h": "730d",
 }
 
 
@@ -177,7 +182,7 @@ def load_open_signals(supabase: Client, limit: int = 500) -> list[dict[str, Any]
             "id, symbol, timeframe, type, entry_price, price, stop_loss, "
             "take_profit, created_at, pattern_at, result"
         )
-        .in_("type", list(LIQ_SWEEP_TYPES))
+        .in_("type", list(SWEEP_ENGULF_TYPES))
         .eq("is_active", True)
         .order("created_at", desc=False)
         .limit(limit)

@@ -13,9 +13,9 @@ import yfinance as yf
 from dotenv import load_dotenv
 from supabase import create_client
 
-from market_data import fetch_mtf_frames
-from strategy.liquidity_sweep import combined_bias, detect_latest_pattern
-from strategy.config import MIN_BARS_5M, MIN_BARS_15M, MIN_MARKET_CAP
+from market_data import fetch_htf_frames
+from strategy.sweep_engulf import detect_latest_pattern
+from strategy.config import MIN_BARS_1H, MIN_BARS_4H, MIN_MARKET_CAP
 from signal_adapter import signal_to_crt_row
 
 # --- LOGGING ---
@@ -28,7 +28,7 @@ class SupabaseLoggingHandler(logging.Handler):
     def __init__(self, supabase_client):
         super().__init__()
         self.supabase = supabase_client
-        self.source = "scanner_liq_sweep_engine"
+        self.source = "scanner_sweep_engulf_engine"
 
     def emit(self, record):
         try:
@@ -356,34 +356,21 @@ def get_market_cap(ticker: str) -> int | None:
 
 
 def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
-    df_4h, df_1h, df_15m, df_5m = fetch_mtf_frames(ticker)
+    df_4h, df_1h = fetch_htf_frames(ticker)
 
     if df_4h is None or df_1h is None:
         return [], "no_data", 0
 
-    bias = combined_bias(df_4h, df_1h)
-    if bias is None:
-        return [], "no_pattern", 0
-
     frames: list[tuple[str, object, int]] = [
-        ("15M", df_15m, MIN_BARS_15M),
-        ("5M", df_5m, MIN_BARS_5M),
+        ("4H", df_4h, MIN_BARS_4H),
+        ("1H", df_1h, MIN_BARS_1H),
     ]
-
-    if all(f is None or len(f) < min_b for _, f, min_b in frames):
-        return [], "no_data", 0
 
     signals: list[dict] = []
     for tf_label, df, min_bars in frames:
         if df is None or len(df) < min_bars:
             continue
-        pattern = detect_latest_pattern(
-            df,
-            tf_label,  # type: ignore[arg-type]
-            bias=bias,
-            df_4h=df_4h,
-            df_1h=df_1h,
-        )
+        pattern = detect_latest_pattern(df, tf_label)  # type: ignore[arg-type]
         if pattern is not None:
             pattern["ticker"] = ticker
             signals.append(pattern)
@@ -417,7 +404,7 @@ def main():
     setup_logging()
     setup_supabase()
 
-    parser = argparse.ArgumentParser(description="CRT Flow Liquidity Sweep Scanner")
+    parser = argparse.ArgumentParser(description="CRT Flow Sweep & Engulf Scanner")
     parser.add_argument(
         "--index",
         type=str,
@@ -457,7 +444,7 @@ def main():
             pass
 
     mode = "DRY-RUN" if args.dry_run else "PERSIST"
-    logger.info(f"🚀 Liquidity Sweep Scanner ({mode})")
+    logger.info(f"🚀 Sweep & Engulf Scanner ({mode})")
 
     if args.symbol:
         tickers = [args.symbol.upper()]

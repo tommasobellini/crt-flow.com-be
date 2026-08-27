@@ -10265,3 +10265,26 @@ Filtro Market Cap in corso...
 Ticker post M-Cap (>= $10B): 171
 Pipeline: no_data=170 | no_pattern=1 | signals=0 | total_rows=0
 ✅ Completato. Segnali trovati: 0
+🚀 Liquidity Sweep Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+   NASDAQ 100: 102 ticker (stockanalysis)
+📡 Caricamento Russell 2000...
+Download Russell 2000 fallito: HTTPSConnectionPool(host='www.ishares.com', port=443): Read timed out. (read timeout=30)
+   Russell 2000: 1953 ticker (IWM_holdings.csv locale)
+   S&P 500: 503 ticker
+   NASDAQ 100: 102 ticker
+   Russell 2000: 1953 ticker
+✅ Ticker unici: 2471 (overlap tra indici rimosso)
+Filtro Market Cap in corso...
+Ticker post M-Cap (>= $10B): 82
+Pipeline: no_data=82 | no_pattern=0 | signals=0 | total_rows=0
+✅ Completato. Segnali trovati: 0
+🚀 Sweep & Engulf Scanner (PERSIST)
+📡 Caricamento S&P 500...
+📡 Caricamento NASDAQ 100...
+   NASDAQ 100: 102 ticker (stockanalysis)
+   S&P 500: 503 ticker
+   NASDAQ 100: 102 ticker
+✅ Ticker unici: 518 (overlap tra indici rimosso)
+Filtro Market Cap in corso...

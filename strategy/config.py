@@ -1,27 +1,38 @@
-"""Tunable parameters for Liquidity Sweep (Flipping Markets) screening."""
+"""Tunable parameters for Sweep & Engulf screening."""
 
 MIN_BARS_4H = 30
 MIN_BARS_1H = 50
-MIN_BARS_15M = 40
-MIN_BARS_5M = 60
 
-PIVOT_WINDOW = 2  # fractal: compare ±2 bars → 5-bar local extreme
-FIB_OTE_RATIO = 0.71
-SL_BUFFER_PCT = 0.0005
-OB_ENTRY_TOLERANCE_PCT = 0.001  # 0.1% — fib must land in OB zone
-SETUP_LOOKBACK = 20  # sweep/MSS must complete within last N LTF bars
-MIN_RR = 1.0
+# Pine defaults
+SWING_LOOKBACK = 3
+RR_RATIO = 2.0
+USE_VOLUME_FILTER = True
+VOL_SMA_LENGTH = 20
+USE_ADX_FILTER = False
+ADX_THRESHOLD = 20
+USE_BODY_FILTER = False
+MIN_BODY_RATIO = 0.4
+USE_EMA_FILTER = False
+EMA_LENGTH = 50
 
 # Universe filter: only large-cap and above
 MIN_MARKET_CAP = 10_000_000_000  # $10B
 
+YF_PERIOD_1H = "730d"
+
 # Legacy — kept for deprecated modules
+MIN_BARS_15M = 40
+MIN_BARS_5M = 60
+PIVOT_WINDOW = 2
+FIB_OTE_RATIO = 0.71
+SL_BUFFER_PCT = 0.0005
+OB_ENTRY_TOLERANCE_PCT = 0.001
+SETUP_LOOKBACK = 20
+MIN_RR = 1.0
 EMA_PERIOD = 20
 STRUCTURE_LOOKBACK = 20
 RSI_PERIOD = 14
 TP_RR_RATIO = 2.0
-
-YF_PERIOD_1H = "60d"
 YF_PERIOD_15M = "60d"
 YF_PERIOD_5M = "30d"
 LTF_INTERVAL = "15m"
