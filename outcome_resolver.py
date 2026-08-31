@@ -22,7 +22,9 @@ from market_data import clean_df
 
 logger = logging.getLogger(__name__)
 
-SWEEP_ENGULF_TYPES = (
+IC_CISD_TYPES = (
+    "bullish_ic_cisd",
+    "bearish_ic_cisd",
     "bullish_sweep_engulf",
     "bearish_sweep_engulf",
     "bullish_liq_sweep",
@@ -182,7 +184,7 @@ def load_open_signals(supabase: Client, limit: int = 500) -> list[dict[str, Any]
             "id, symbol, timeframe, type, entry_price, price, stop_loss, "
             "take_profit, created_at, pattern_at, result"
         )
-        .in_("type", list(SWEEP_ENGULF_TYPES))
+        .in_("type", list(IC_CISD_TYPES))
         .eq("is_active", True)
         .order("created_at", desc=False)
         .limit(limit)

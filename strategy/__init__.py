@@ -1,3 +1,3 @@
-from strategy.sweep_engulf import detect_latest_pattern
+from strategy.ic_cisd import detect_latest_pattern, resolve_htf_bias
 
-__all__ = ["detect_latest_pattern"]
+__all__ = ["detect_latest_pattern", "resolve_htf_bias"]

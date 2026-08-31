@@ -44,9 +44,8 @@ jobs:
               echo "⚠️  dca_screener.py non presente — skip"
             fi
           else
-            echo "📊 Running Hourly Intraday Scanner (S&P 500 + NASDAQ)..."
-            python scanner.py --index sp500 --persist
-            python scanner.py --index nasdaq --persist
+            echo "📊 Running IC-CISD Scanner (36 watchlist)..."
+            python scanner.py
             python outcome_resolver.py
             if [ -f dca_notifier.py ]; then
               python dca_notifier.py

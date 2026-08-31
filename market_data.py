@@ -5,7 +5,16 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from strategy.config import MIN_BARS_1H, MIN_BARS_4H, YF_PERIOD_1H
+from strategy.config import (
+    MIN_BARS_15M,
+    MIN_BARS_4H,
+    MIN_BARS_5M,
+    MIN_BARS_DAILY,
+    YF_PERIOD_15M,
+    YF_PERIOD_1H,
+    YF_PERIOD_5M,
+    YF_PERIOD_DAILY,
+)
 
 _OHLCV_NAMES = frozenset({"open", "high", "low", "close", "volume", "adj close"})
 _YF_RETRIES = 3
@@ -88,25 +97,66 @@ def _history_with_retry(
     return last
 
 
+def fetch_ic_cisd_frames(
+    ticker: str,
+) -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+]:
+    """Return (Daily, 4H, 15M, 5M) for IC-CISD scanning."""
+    try:
+        stock = yf.Ticker(ticker)
+        df_daily = _history_with_retry(stock, period=YF_PERIOD_DAILY, interval="1d")
+        df_1h = _history_with_retry(stock, period=YF_PERIOD_1H, interval="1h")
+        df_15m = _history_with_retry(stock, period=YF_PERIOD_15M, interval="15m")
+        df_5m = _history_with_retry(stock, period=YF_PERIOD_5M, interval="5m")
+    except Exception:
+        return None, None, None, None
+
+    df_daily = clean_df(df_daily.dropna() if df_daily is not None else None)
+    df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
+    df_15m = clean_df(df_15m.dropna() if df_15m is not None else None)
+    df_5m = clean_df(df_5m.dropna() if df_5m is not None else None)
+
+    if df_daily is None or df_daily.empty or len(df_daily) < MIN_BARS_DAILY:
+        return None, None, None, None
+
+    df_4h = None
+    if df_1h is not None and not df_1h.empty:
+        df_4h = resample_to_4h(df_1h)
+        if df_4h.empty or len(df_4h) < MIN_BARS_4H:
+            df_4h = None
+
+    if df_15m is not None and (df_15m.empty or len(df_15m) < MIN_BARS_15M):
+        df_15m = None
+    if df_5m is not None and (df_5m.empty or len(df_5m) < MIN_BARS_5M):
+        df_5m = None
+
+    if df_15m is None and df_5m is None:
+        return None, None, None, None
+
+    return df_daily, df_4h, df_15m, df_5m
+
+
 def fetch_htf_frames(
     ticker: str,
 ) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Return (4H, 1H) resampled from 1H history for Sweep & Engulf scanning."""
+    """Legacy shim for sweep_engulf."""
+    daily, h4, _, _ = fetch_ic_cisd_frames(ticker)
+    if daily is None:
+        return None, None
     try:
         stock = yf.Ticker(ticker)
         df_1h = _history_with_retry(stock, period=YF_PERIOD_1H, interval="1h")
+        df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
+        if df_1h is None or df_1h.empty:
+            return h4, h4
+        df_4h = resample_to_4h(df_1h)
+        return df_4h, df_1h
     except Exception:
-        return None, None
-
-    df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
-    if df_1h is None or df_1h.empty or len(df_1h) < MIN_BARS_1H:
-        return None, None
-
-    df_4h = resample_to_4h(df_1h)
-    if df_4h.empty or len(df_4h) < MIN_BARS_4H:
-        return None, None
-
-    return df_4h, df_1h
+        return h4, h4
 
 
 def fetch_mtf_frames(
@@ -117,6 +167,5 @@ def fetch_mtf_frames(
     pd.DataFrame | None,
     pd.DataFrame | None,
 ]:
-    """Legacy shim — returns (4H, 1H, None, None)."""
-    df_4h, df_1h = fetch_htf_frames(ticker)
-    return df_4h, df_1h, None, None
+    daily, h4, m15, m5 = fetch_ic_cisd_frames(ticker)
+    return h4, daily, m15, m5

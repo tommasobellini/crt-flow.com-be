@@ -13,9 +13,9 @@ import yfinance as yf
 from dotenv import load_dotenv
 from supabase import create_client
 
-from market_data import fetch_htf_frames
-from strategy.sweep_engulf import detect_latest_pattern
-from strategy.config import MIN_BARS_1H, MIN_BARS_4H, MIN_MARKET_CAP
+from market_data import fetch_ic_cisd_frames
+from strategy.ic_cisd import detect_latest_pattern, resolve_htf_bias
+from strategy.config import MIN_BARS_15M, MIN_BARS_5M, TARGET_WATCHLIST
 from signal_adapter import signal_to_crt_row
 
 # --- LOGGING ---
@@ -28,7 +28,7 @@ class SupabaseLoggingHandler(logging.Handler):
     def __init__(self, supabase_client):
         super().__init__()
         self.supabase = supabase_client
-        self.source = "scanner_sweep_engulf_engine"
+        self.source = "scanner_ic_cisd_engine"
 
     def emit(self, record):
         try:
@@ -350,7 +350,7 @@ def check_mcap(ticker: str) -> str | None:
             if hasattr(ticker_obj, "fast_info")
             else 0
         )
-        return ticker if mcap >= MIN_MARKET_CAP else None
+        return ticker if mcap >= 10_000_000_000 else None
     except Exception:
         return None
 
@@ -374,21 +374,30 @@ def get_market_cap(ticker: str) -> int | None:
 
 
 def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
-    df_4h, df_1h = fetch_htf_frames(ticker)
+    df_daily, df_4h, df_15m, df_5m = fetch_ic_cisd_frames(ticker)
 
-    if df_4h is None or df_1h is None:
+    if df_daily is None:
         return [], "no_data", 0
 
+    htf_ctx = resolve_htf_bias(df_daily, df_4h)
+    if htf_ctx is None:
+        return [], "no_pattern", 0
+
     frames: list[tuple[str, object, int]] = [
-        ("4H", df_4h, MIN_BARS_4H),
-        ("1H", df_1h, MIN_BARS_1H),
+        ("15M", df_15m, MIN_BARS_15M),
+        ("5M", df_5m, MIN_BARS_5M),
     ]
 
     signals: list[dict] = []
     for tf_label, df, min_bars in frames:
         if df is None or len(df) < min_bars:
             continue
-        pattern = detect_latest_pattern(df, tf_label)  # type: ignore[arg-type]
+        pattern = detect_latest_pattern(
+            df,
+            tf_label,  # type: ignore[arg-type]
+            htf_ctx=htf_ctx,
+            df_daily=df_daily,
+        )
         if pattern is not None:
             pattern["ticker"] = ticker
             signals.append(pattern)
@@ -422,13 +431,13 @@ def main():
     setup_logging()
     setup_supabase()
 
-    parser = argparse.ArgumentParser(description="CRT Flow Sweep & Engulf Scanner")
+    parser = argparse.ArgumentParser(description="CRT Flow IC-CISD Scanner")
     parser.add_argument(
         "--index",
         type=str,
-        default="us",
-        choices=["sp500", "nasdaq", "russell", "us", "all"],
-        help="Universe: us = S&P 500 + NASDAQ 100 (default), all = us + Russell 2000",
+        default="watchlist",
+        choices=["watchlist", "sp500", "nasdaq", "russell", "us", "all"],
+        help="Universe: watchlist = 36 IC-CISD assets (default)",
     )
     parser.add_argument(
         "--dry-run",
@@ -462,10 +471,13 @@ def main():
             pass
 
     mode = "DRY-RUN" if args.dry_run else "PERSIST"
-    logger.info(f"🚀 Sweep & Engulf Scanner ({mode})")
+    logger.info(f"🚀 IC-CISD Scanner ({mode})")
 
     if args.symbol:
         tickers = [args.symbol.upper()]
+    elif args.index == "watchlist":
+        tickers = list(TARGET_WATCHLIST)
+        logger.info(f"📡 Watchlist IC-CISD: {len(tickers)} ticker")
     else:
         all_tickers: list[str] = []
         index_counts: dict[str, int] = {}

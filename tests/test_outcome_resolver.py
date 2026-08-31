@@ -13,7 +13,7 @@ def test_resolve_outcome_long_tp():
         index=idx,
     )
     sig = {
-        "type": "bullish_liq_sweep",
+        "type": "bullish_ic_cisd",
         "entry_price": 100.0,
         "stop_loss": 98.0,
         "take_profit": 104.0,
