@@ -13,7 +13,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 from supabase import create_client
 
-from market_data import fetch_ic_cisd_frames
+from market_data import download_ic_cisd_universe, fetch_ic_cisd_frames
 from strategy.ic_cisd import detect_latest_pattern, resolve_htf_bias
 from strategy.config import MIN_BARS_15M, MIN_BARS_5M, TARGET_WATCHLIST
 from signal_adapter import signal_to_crt_row
@@ -373,8 +373,22 @@ def get_market_cap(ticker: str) -> int | None:
         return None
 
 
-def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
-    df_daily, df_4h, df_15m, df_5m = fetch_ic_cisd_frames(ticker)
+def scan_ticker(
+    ticker: str,
+    persist: bool,
+    frames: tuple[
+        pd.DataFrame | None,
+        pd.DataFrame | None,
+        pd.DataFrame | None,
+        pd.DataFrame | None,
+    ]
+    | None = None,
+    fetch_mcap: bool = False,
+) -> tuple[list[dict], str, int]:
+    if frames is not None:
+        df_daily, df_4h, df_15m, df_5m = frames
+    else:
+        df_daily, df_4h, df_15m, df_5m = fetch_ic_cisd_frames(ticker)
 
     if df_daily is None:
         return [], "no_data", 0
@@ -383,13 +397,13 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     if htf_ctx is None:
         return [], "no_pattern", 0
 
-    frames: list[tuple[str, object, int]] = [
+    tf_frames: list[tuple[str, object, int]] = [
         ("15M", df_15m, MIN_BARS_15M),
         ("5M", df_5m, MIN_BARS_5M),
     ]
 
     signals: list[dict] = []
-    for tf_label, df, min_bars in frames:
+    for tf_label, df, min_bars in tf_frames:
         if df is None or len(df) < min_bars:
             continue
         pattern = detect_latest_pattern(
@@ -405,8 +419,8 @@ def scan_ticker(ticker: str, persist: bool) -> tuple[list[dict], str, int]:
     if not signals:
         return [], "no_pattern", 0
 
-    market_cap = get_market_cap(ticker) if persist else None
-    if persist and market_cap is None:
+    market_cap = get_market_cap(ticker) if persist and fetch_mcap else None
+    if persist and fetch_mcap and market_cap is None:
         logger.warning(f"⚠️  market_cap unavailable for {ticker}")
     for signal in signals:
         if market_cap is not None:
@@ -528,9 +542,23 @@ def main():
         "no_pattern": 0,
         "signal": 0,
     }
+    use_batch = args.symbol is None
+    fetch_mcap = persist and args.index != "watchlist" and not args.symbol
+    universe: dict[str, tuple] = {}
+    if use_batch:
+        logger.info(f"📥 Yahoo batch download ({len(tickers)} ticker × 4 intervals)...")
+        universe = download_ic_cisd_universe(tickers)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(scan_ticker, t, persist): t for t in tickers
+            executor.submit(
+                scan_ticker,
+                t,
+                persist,
+                universe.get(t.upper()) if use_batch else None,
+                fetch_mcap,
+            ): t
+            for t in tickers
         }
         for future in concurrent.futures.as_completed(futures):
             ticker = futures[future]

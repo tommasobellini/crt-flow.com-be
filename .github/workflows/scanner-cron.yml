@@ -2,11 +2,12 @@ name: CRT Flow Intraday Scanner
 
 on:
   schedule:
-    # 1. Scanner Intraday: Gira ogni ora dalle 09:00 alle 21:00 UTC, lun-ven
-    - cron: '23 9-21 * * 1-5'
-    # 2. DCA Screener: Gira una volta al giorno alle 01:00 UTC
+    # IC-CISD 15M/5M: ogni 15 min in sessione US (non ogni 5: Yahoo 429 sul free tier)
+    # 13–21 UTC ≈ 9:30–16:00 ET + buffer, lun–ven. GitHub può slittare di qualche minuto.
+    - cron: '2,17,32,47 13-21 * * 1-5'
+    # DCA Screener: una volta al giorno alle 01:00 UTC
     - cron: '0 1 * * *'
-  workflow_dispatch: # Ti permette di avviarlo a mano con un click per testare
+  workflow_dispatch:
 
 jobs:
   build:

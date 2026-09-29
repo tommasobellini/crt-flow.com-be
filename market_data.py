@@ -66,8 +66,8 @@ def clean_df(df: pd.DataFrame | None) -> pd.DataFrame | None:
     return df
 
 
-def resample_to_4h(df_1h: pd.DataFrame) -> pd.DataFrame:
-    df = df_1h.copy()
+def _resample_ohlcv(df_src: pd.DataFrame, rule: str) -> pd.DataFrame:
+    df = df_src.copy()
     if getattr(df.index, "tz", None) is not None:
         df.index = df.index.tz_convert(None)
     agg = {
@@ -78,7 +78,19 @@ def resample_to_4h(df_1h: pd.DataFrame) -> pd.DataFrame:
     }
     if "Volume" in df.columns:
         agg["Volume"] = "sum"
-    return df.resample("4h").agg(agg).dropna()
+    return df.resample(rule).agg(agg).dropna()
+
+
+def resample_to_4h(df_1h: pd.DataFrame) -> pd.DataFrame:
+    return _resample_ohlcv(df_1h, "4h")
+
+
+def resample_to_7h(df_1h: pd.DataFrame) -> pd.DataFrame:
+    return _resample_ohlcv(df_1h, "7h")
+
+
+def resample_to_weekly(df_daily: pd.DataFrame) -> pd.DataFrame:
+    return _resample_ohlcv(df_daily, "W")
 
 
 def _history_with_retry(
@@ -97,29 +109,65 @@ def _history_with_retry(
     return last
 
 
-def fetch_ic_cisd_frames(
-    ticker: str,
+def _extract_ticker_ohlc(raw: pd.DataFrame, ticker: str) -> pd.DataFrame | None:
+    """Slice a yf.download MultiIndex (or single-ticker) frame to OHLCV for one symbol."""
+    if raw is None or raw.empty:
+        return None
+    df = raw
+    if isinstance(df.columns, pd.MultiIndex):
+        names = [str(n).lower() if n is not None else "" for n in (df.columns.names or [])]
+        try:
+            if "ticker" in names:
+                df = df.xs(ticker, axis=1, level="ticker")
+            elif len(df.columns.names) >= 2 and names[-1] == "ticker":
+                df = df.xs(ticker, axis=1, level=-1)
+            elif ticker in df.columns.get_level_values(0):
+                df = df.xs(ticker, axis=1, level=0)
+            elif ticker in df.columns.get_level_values(-1):
+                df = df.xs(ticker, axis=1, level=-1)
+            else:
+                return None
+        except (KeyError, ValueError):
+            return None
+    cleaned = clean_df(df.dropna() if df is not None else None)
+    if cleaned is None or cleaned.empty:
+        return None
+    return cleaned
+
+
+def _download_interval(tickers: list[str], *, period: str, interval: str) -> pd.DataFrame | None:
+    last: pd.DataFrame | None = None
+    for attempt in range(_YF_RETRIES):
+        try:
+            last = yf.download(
+                tickers=tickers,
+                period=period,
+                interval=interval,
+                group_by="ticker",
+                auto_adjust=True,
+                threads=True,
+                progress=False,
+            )
+            if last is not None and not last.empty:
+                return last
+        except Exception:
+            last = None
+        if attempt < _YF_RETRIES - 1:
+            time.sleep(_YF_BACKOFF_SEC * (attempt + 1))
+    return last
+
+
+def _frames_from_ohlc(
+    df_daily: pd.DataFrame | None,
+    df_1h: pd.DataFrame | None,
+    df_15m: pd.DataFrame | None,
+    df_5m: pd.DataFrame | None,
 ) -> tuple[
     pd.DataFrame | None,
     pd.DataFrame | None,
     pd.DataFrame | None,
     pd.DataFrame | None,
 ]:
-    """Return (Daily, 4H, 15M, 5M) for IC-CISD scanning."""
-    try:
-        stock = yf.Ticker(ticker)
-        df_daily = _history_with_retry(stock, period=YF_PERIOD_DAILY, interval="1d")
-        df_1h = _history_with_retry(stock, period=YF_PERIOD_1H, interval="1h")
-        df_15m = _history_with_retry(stock, period=YF_PERIOD_15M, interval="15m")
-        df_5m = _history_with_retry(stock, period=YF_PERIOD_5M, interval="5m")
-    except Exception:
-        return None, None, None, None
-
-    df_daily = clean_df(df_daily.dropna() if df_daily is not None else None)
-    df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
-    df_15m = clean_df(df_15m.dropna() if df_15m is not None else None)
-    df_5m = clean_df(df_5m.dropna() if df_5m is not None else None)
-
     if df_daily is None or df_daily.empty or len(df_daily) < MIN_BARS_DAILY:
         return None, None, None, None
 
@@ -138,6 +186,59 @@ def fetch_ic_cisd_frames(
         return None, None, None, None
 
     return df_daily, df_4h, df_15m, df_5m
+
+
+def download_ic_cisd_universe(
+    tickers: list[str],
+) -> dict[str, tuple[pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None]]:
+    """Batch-download Daily/1H/15M/5M for the watchlist (4 Yahoo calls instead of 4×N)."""
+    unique = [t.strip().upper() for t in tickers if t and str(t).strip()]
+    unique = list(dict.fromkeys(unique))
+    out: dict[
+        str,
+        tuple[pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None],
+    ] = {t: (None, None, None, None) for t in unique}
+    if not unique:
+        return out
+
+    raw_daily = _download_interval(unique, period=YF_PERIOD_DAILY, interval="1d")
+    raw_1h = _download_interval(unique, period=YF_PERIOD_1H, interval="1h")
+    raw_15m = _download_interval(unique, period=YF_PERIOD_15M, interval="15m")
+    raw_5m = _download_interval(unique, period=YF_PERIOD_5M, interval="5m")
+
+    for ticker in unique:
+        daily = _extract_ticker_ohlc(raw_daily, ticker) if raw_daily is not None else None
+        h1 = _extract_ticker_ohlc(raw_1h, ticker) if raw_1h is not None else None
+        m15 = _extract_ticker_ohlc(raw_15m, ticker) if raw_15m is not None else None
+        m5 = _extract_ticker_ohlc(raw_5m, ticker) if raw_5m is not None else None
+        out[ticker] = _frames_from_ohlc(daily, h1, m15, m5)
+    return out
+
+
+def fetch_ic_cisd_frames(
+    ticker: str,
+) -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+]:
+    """Return (Daily, 4H, 15M, 5M) for IC-CISD scanning (single ticker)."""
+    try:
+        stock = yf.Ticker(ticker)
+        df_daily = _history_with_retry(stock, period=YF_PERIOD_DAILY, interval="1d")
+        df_1h = _history_with_retry(stock, period=YF_PERIOD_1H, interval="1h")
+        df_15m = _history_with_retry(stock, period=YF_PERIOD_15M, interval="15m")
+        df_5m = _history_with_retry(stock, period=YF_PERIOD_5M, interval="5m")
+    except Exception:
+        return None, None, None, None
+
+    df_daily = clean_df(df_daily.dropna() if df_daily is not None else None)
+    df_1h = clean_df(df_1h.dropna() if df_1h is not None else None)
+    df_15m = clean_df(df_15m.dropna() if df_15m is not None else None)
+    df_5m = clean_df(df_5m.dropna() if df_5m is not None else None)
+
+    return _frames_from_ohlc(df_daily, df_1h, df_15m, df_5m)
 
 
 def fetch_htf_frames(

@@ -116,3 +116,38 @@ def test_rr_below_min_not_returned():
     # May be None if RR too low or timing fails — acceptable
     if sig is not None:
         assert sig["pattern_levels"]["rr"] >= 1.5
+
+
+def test_extract_ticker_ohlc_from_grouped_download():
+    from market_data import _extract_ticker_ohlc
+
+    idx = pd.date_range("2026-08-01", periods=3, freq="1D")
+    cols = pd.MultiIndex.from_product(
+        [["AAPL", "MSFT"], ["Open", "High", "Low", "Close", "Volume"]],
+        names=["ticker", "price"],
+    )
+    data = {
+        ("AAPL", "Open"): [1, 2, 3],
+        ("AAPL", "High"): [1.5, 2.5, 3.5],
+        ("AAPL", "Low"): [0.9, 1.9, 2.9],
+        ("AAPL", "Close"): [1.2, 2.2, 3.2],
+        ("AAPL", "Volume"): [10, 20, 30],
+        ("MSFT", "Open"): [10, 11, 12],
+        ("MSFT", "High"): [11, 12, 13],
+        ("MSFT", "Low"): [9, 10, 11],
+        ("MSFT", "Close"): [10.5, 11.5, 12.5],
+        ("MSFT", "Volume"): [100, 110, 120],
+    }
+    raw = pd.DataFrame(data, index=idx)
+    raw.columns = cols
+    aapl = _extract_ticker_ohlc(raw, "AAPL")
+    assert aapl is not None
+    assert list(aapl.columns)[:5] == ["Open", "High", "Low", "Close", "Volume"]
+    assert float(aapl["Close"].iloc[-1]) == 3.2
+
+    # yfinance group_by="ticker" often uses (Ticker, Field) without names
+    unnamed = pd.DataFrame(data, index=idx)
+    unnamed.columns = pd.MultiIndex.from_tuples(list(data.keys()))
+    msft = _extract_ticker_ohlc(unnamed, "MSFT")
+    assert msft is not None
+    assert float(msft["Close"].iloc[0]) == 10.5
