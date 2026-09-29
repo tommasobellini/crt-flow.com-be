@@ -7,6 +7,9 @@ import pandas as pd
 
 PIVOT_WINDOW = 3
 NO_WICK_RATIO = 0.05
+# Only evaluate Devil's Markers on the N most recent confirmable bars
+# (a pivot needs `PIVOT_WINDOW` bars to the right, so the newest candidate is n-window-1).
+RECENT_LOOKBACK = 3
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["MARKER_PENDING", "CONTINUATION_ACTIVE", "INVALIDATED"]
@@ -187,17 +190,21 @@ def find_devils_markers(
     ticker: str,
     timeframe: TfLabel,
     window: int = PIVOT_WINDOW,
+    recent_lookback: int = RECENT_LOOKBACK,
     df_ltf: pd.DataFrame | None = None,
     include_invalidated: bool = False,
 ) -> list[dict]:
-    """Return all confirmed Devil's Markers on the frame (newest first)."""
+    """Return Devil's Markers only on the last `recent_lookback` confirmable bars."""
     if df is None or df.empty or len(df) < window * 2 + 2:
         return []
 
     n = len(df)
+    # Newest confirmable pivot index (needs `window` bars on the right).
+    end_i = n - window - 1
+    start_i = max(window, end_i - recent_lookback + 1)
     signals: list[dict] = []
 
-    for i in range(n - window - 1, window - 1, -1):
+    for i in range(end_i, start_i - 1, -1):
         row = df.iloc[i]
         o, h, l, c = (
             _to_f(row["Open"]),
@@ -257,17 +264,19 @@ def detect_active_devils_marker(
     ticker: str,
     timeframe: TfLabel,
     window: int = PIVOT_WINDOW,
+    recent_lookback: int = RECENT_LOOKBACK,
     df_ltf: pd.DataFrame | None = None,
 ) -> dict | None:
     """
     Prefer newest CONTINUATION_ACTIVE, else newest MARKER_PENDING.
-    One active marker per (ticker, timeframe).
+    Only considers the last `recent_lookback` confirmable bars.
     """
     markers = find_devils_markers(
         df,
         ticker=ticker,
         timeframe=timeframe,
         window=window,
+        recent_lookback=recent_lookback,
         df_ltf=df_ltf,
         include_invalidated=False,
     )
