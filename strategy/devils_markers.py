@@ -1,4 +1,18 @@
-"""Devil's Markers — Pure No-Wick on last 3 HTF candles (isolated from IC-CISD)."""
+"""
+Devil's Markers — replicated from TradingView "Devils Mark" Pine.
+
+Pine core condition (current / HTF bar):
+    open == high   OR   open == low
+
+- Open == High → BEARISH mark at Open (no upper wick from the open)
+- Open == Low  → BULLISH mark at Open (no lower wick from the open)
+- Invalidation: later bar range crosses through the mark level (Pine line delete)
+
+Trade layer (our addition for performance tracking):
+- SL = mark level (Open)
+- Entry = Close of the mark candle (must leave room vs SL)
+- TP = prior structural swing
+"""
 from __future__ import annotations
 
 from typing import Literal
@@ -6,13 +20,13 @@ from typing import Literal
 import pandas as pd
 
 PIVOT_WINDOW = 3
-NO_WICK_RATIO = 0.05
-RECENT_CANDLES = 3  # analyze only bars -3, -2, -1 (0-based: n-3 .. n-1)
+RECENT_CANDLES = 3
 MIN_RR = 1.5
-# Reject setups where Entry≈SL (zero risk) or TP is junk data
-MIN_RISK_PCT = 0.0008  # 0.08% of price min between entry and SL
-MAX_RR = 25.0  # above this, Entry/SL/TP geometry is almost certainly wrong
-MAX_TARGET_MOVE_PCT = 0.35  # TP farther than 35% from entry is discarded
+MIN_RISK_PCT = 0.0008
+MAX_RR = 25.0
+MAX_TARGET_MOVE_PCT = 0.35
+# Float tolerance for open==high / open==low (Yahoo rarely exact)
+PRICE_EQ_TOL = 1e-6
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["ACTIVE", "INVALIDATED", "CLOSED_WIN", "CLOSED_LOSS"]
@@ -30,42 +44,21 @@ def _to_unix(ts: pd.Timestamp) -> int:
     return int(ts.timestamp())
 
 
-def _candle_range(high: float, low: float) -> float:
-    return max(high - low, 1e-12)
+def _price_eq(a: float, b: float) -> bool:
+    """Pine `open == high` / `open == low` with float-safe equality."""
+    scale = max(abs(a), abs(b), 1.0)
+    return abs(a - b) <= max(scale * PRICE_EQ_TOL, 1e-8)
 
 
-def _is_no_wick_high(o: float, h: float, l: float, c: float) -> bool:
-    return (h - max(o, c)) <= NO_WICK_RATIO * _candle_range(h, l)
+def _is_open_eq_high(o: float, h: float) -> bool:
+    return _price_eq(o, h)
 
 
-def _is_no_wick_low(o: float, h: float, l: float, c: float) -> bool:
-    return (min(o, c) - l) <= NO_WICK_RATIO * _candle_range(h, l)
-
-
-def _is_local_swing_high(df: pd.DataFrame, i: int, window: int = 1) -> bool:
-    """Soft swing: higher high than immediate neighbors (works on last bars)."""
-    n = len(df)
-    h = _to_f(df.iloc[i]["High"])
-    left_ok = i == 0 or h >= _to_f(df.iloc[i - 1]["High"])
-    right_ok = i == n - 1 or h > _to_f(df.iloc[i + 1]["High"])
-    # Also beat left window if available
-    if i >= window:
-        left_ok = left_ok and h >= float(df["High"].iloc[i - window : i].max())
-    return left_ok and right_ok
-
-
-def _is_local_swing_low(df: pd.DataFrame, i: int, window: int = 1) -> bool:
-    n = len(df)
-    l = _to_f(df.iloc[i]["Low"])
-    left_ok = i == 0 or l <= _to_f(df.iloc[i - 1]["Low"])
-    right_ok = i == n - 1 or l < _to_f(df.iloc[i + 1]["Low"])
-    if i >= window:
-        left_ok = left_ok and l <= float(df["Low"].iloc[i - window : i].min())
-    return left_ok and right_ok
+def _is_open_eq_low(o: float, l: float) -> bool:
+    return _price_eq(o, l)
 
 
 def _find_prior_swing_high(df: pd.DataFrame, before_i: int, window: int = PIVOT_WINDOW) -> float | None:
-    """Most recent confirmed pivot high before `before_i` (target for shorts)."""
     for i in range(before_i - 1, window - 1, -1):
         h = _to_f(df.iloc[i]["High"])
         left = df["High"].iloc[i - window : i]
@@ -74,7 +67,6 @@ def _find_prior_swing_high(df: pd.DataFrame, before_i: int, window: int = PIVOT_
             continue
         if h >= float(left.max()) and h >= float(right.max()):
             return h
-    # Fallback: highest high in prior lookback
     start = max(0, before_i - 40)
     if start >= before_i:
         return None
@@ -82,7 +74,6 @@ def _find_prior_swing_high(df: pd.DataFrame, before_i: int, window: int = PIVOT_
 
 
 def _find_prior_swing_low(df: pd.DataFrame, before_i: int, window: int = PIVOT_WINDOW) -> float | None:
-    """Most recent confirmed pivot low before `before_i` (target for longs)."""
     for i in range(before_i - 1, window - 1, -1):
         l = _to_f(df.iloc[i]["Low"])
         left = df["Low"].iloc[i - window : i]
@@ -97,24 +88,6 @@ def _find_prior_swing_low(df: pd.DataFrame, before_i: int, window: int = PIVOT_W
     return float(df["Low"].iloc[start:before_i].min())
 
 
-def _entry_price(direction: Direction, o: float, h: float, l: float, c: float) -> float | None:
-    """
-    Entry on the trade side of the No-Wick SL with real risk.
-
-    Prefer Open (origin of the push into the devil extreme) so Entry≠SL
-    when the candle closes glued to the High/Low.
-    """
-    if direction == "BEARISH":
-        for x in (o, (o + c) / 2.0, c):
-            if x < h:
-                return round(x, 4)
-        return None
-    for x in (o, (o + c) / 2.0, c):
-        if x > l:
-            return round(x, 4)
-    return None
-
-
 def _compute_rr(direction: Direction, entry: float, stop: float, target: float) -> float | None:
     if entry <= 0 or stop <= 0 or target <= 0:
         return None
@@ -126,10 +99,8 @@ def _compute_rr(direction: Direction, entry: float, stop: float, target: float) 
         reward = entry - target
     if risk <= 0 or reward <= 0:
         return None
-    # Minimum risk distance (avoid Entry≈SL → R:R millions)
     if risk / entry < MIN_RISK_PCT:
         return None
-    # Target must be realistic vs price
     if reward / entry > MAX_TARGET_MOVE_PCT:
         return None
     rr = reward / risk
@@ -138,28 +109,37 @@ def _compute_rr(direction: Direction, entry: float, stop: float, target: float) 
     return round(rr, 4)
 
 
-def _status_after_marker(
-    df: pd.DataFrame,
-    swing_i: int,
-    direction: Direction,
-    stop: float,
-    target: float,
-) -> Status:
-    """Invalidate only on break of No-Wick SL; otherwise stay ACTIVE until closed by resolver."""
-    after = df.iloc[swing_i + 1 :]
+def _bar_crosses_level(
+    level: float,
+    high: float,
+    low: float,
+    prev_high: float | None,
+    prev_low: float | None,
+) -> bool:
+    """Pine: delete line when bar range crosses the mark."""
+    if high > level and low < level:
+        return True
+    if prev_high is not None and high > level and prev_high <= level:
+        return True
+    if prev_low is not None and low < level and prev_low >= level:
+        return True
+    return False
+
+
+def _status_after_marker(df: pd.DataFrame, mark_i: int, level: float) -> Status:
+    """ACTIVE until a later bar crosses the Devil's Mark level (Pine invalidation)."""
+    after = df.iloc[mark_i + 1 :]
+    if after.empty:
+        return "ACTIVE"
+
+    prev_high = _to_f(df.iloc[mark_i]["High"])
+    prev_low = _to_f(df.iloc[mark_i]["Low"])
     for _, row in after.iterrows():
         high = _to_f(row["High"])
         low = _to_f(row["Low"])
-        if direction == "BEARISH":
-            if high > stop:
-                return "INVALIDATED"
-            if low <= target:
-                return "ACTIVE"  # TP reachable — keep active for resolver
-        else:
-            if low < stop:
-                return "INVALIDATED"
-            if high >= target:
-                return "ACTIVE"
+        if _bar_crosses_level(level, high, low, prev_high, prev_low):
+            return "INVALIDATED"
+        prev_high, prev_low = high, low
     return "ACTIVE"
 
 
@@ -174,10 +154,10 @@ def _build_signal(
     target: float,
     rr: float,
     status: Status,
-    swing_i: int,
+    mark_i: int,
     df: pd.DataFrame,
 ) -> dict:
-    ts = df.index[swing_i]
+    ts = df.index[mark_i]
     return {
         "ticker": ticker.upper(),
         "timeframe": timeframe,
@@ -191,10 +171,10 @@ def _build_signal(
         "status": status,
         "pattern_at": pd.Timestamp(ts).isoformat(),
         "pattern_unix": _to_unix(pd.Timestamp(ts)),
-        # Legacy fields kept nullable-compatible for older UI rows
         "cisd_level": entry,
         "is_cisd_broken": True,
         "cisd_label": "ENTRY",
+        "meta_rule": "open_eq_high" if direction == "BEARISH" else "open_eq_low",
     }
 
 
@@ -207,8 +187,9 @@ def find_devils_markers(
     include_invalidated: bool = False,
 ) -> list[dict]:
     """
-    Pure No-Wick on the last `recent_candles` bars only (indices n-3..n-1).
-    No CISD gate. SL = No-Wick extreme. TP = prior structural swing.
+    Pine Devils Mark on the last `recent_candles` bars:
+        open == high  → BEARISH at Open
+        open == low   → BULLISH at Open
     """
     if df is None or df.empty or len(df) < 10:
         return []
@@ -226,19 +207,21 @@ def find_devils_markers(
             _to_f(row["Close"]),
         )
 
-        # Bearish Devil: No-Wick swing high
-        if _is_no_wick_high(o, h, l, c) and _is_local_swing_high(df, i):
+        # --- Pine: open == high ---
+        if _is_open_eq_high(o, h):
+            level = o
+            # Need close below mark for short entry risk
+            if c >= level:
+                continue
             target = _find_prior_swing_low(df, i)
-            if target is None or target >= h or target <= 0:
+            if target is None or target >= c or target <= 0:
                 continue
-            entry = _entry_price("BEARISH", o, h, l, c)
-            if entry is None:
-                continue
-            stop = h
+            entry = round(c, 4)
+            stop = level
             rr = _compute_rr("BEARISH", entry, stop, target)
             if rr is None:
                 continue
-            status = _status_after_marker(df, i, "BEARISH", stop, target)
+            status = _status_after_marker(df, i, level)
             if status == "INVALIDATED" and not include_invalidated:
                 continue
             signals.append(
@@ -246,30 +229,31 @@ def find_devils_markers(
                     ticker=ticker,
                     timeframe=timeframe,
                     direction="BEARISH",
-                    devil=h,
+                    devil=level,
                     entry=entry,
                     stop=stop,
                     target=target,
                     rr=rr,
                     status=status,
-                    swing_i=i,
+                    mark_i=i,
                     df=df,
                 )
             )
 
-        # Bullish Devil: No-Wick swing low
-        if _is_no_wick_low(o, h, l, c) and _is_local_swing_low(df, i):
+        # --- Pine: open == low ---
+        if _is_open_eq_low(o, l):
+            level = o
+            if c <= level:
+                continue
             target = _find_prior_swing_high(df, i)
-            if target is None or target <= l or target <= 0:
+            if target is None or target <= c or target <= 0:
                 continue
-            entry = _entry_price("BULLISH", o, h, l, c)
-            if entry is None:
-                continue
-            stop = l
+            entry = round(c, 4)
+            stop = level
             rr = _compute_rr("BULLISH", entry, stop, target)
             if rr is None:
                 continue
-            status = _status_after_marker(df, i, "BULLISH", stop, target)
+            status = _status_after_marker(df, i, level)
             if status == "INVALIDATED" and not include_invalidated:
                 continue
             signals.append(
@@ -277,13 +261,13 @@ def find_devils_markers(
                     ticker=ticker,
                     timeframe=timeframe,
                     direction="BULLISH",
-                    devil=l,
+                    devil=level,
                     entry=entry,
                     stop=stop,
                     target=target,
                     rr=rr,
                     status=status,
-                    swing_i=i,
+                    mark_i=i,
                     df=df,
                 )
             )
@@ -298,7 +282,7 @@ def detect_active_devils_marker(
     timeframe: TfLabel,
     recent_candles: int = RECENT_CANDLES,
 ) -> dict | None:
-    """Newest ACTIVE marker on last N candles; prefer high R:R."""
+    """Newest ACTIVE Pine-style Devil's Mark; prefer R:R ≥ 1.5."""
     markers = find_devils_markers(
         df,
         ticker=ticker,
@@ -310,5 +294,4 @@ def detect_active_devils_marker(
     if not active:
         return None
     high_rr = [m for m in active if m.get("is_high_rr")]
-    pool = high_rr or active
-    return pool[0]
+    return (high_rr or active)[0]

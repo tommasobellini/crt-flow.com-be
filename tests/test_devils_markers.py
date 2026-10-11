@@ -1,10 +1,12 @@
-"""Unit tests for Pure No-Wick Devil's Markers."""
+"""Unit tests — Pine Devils Mark: open==high / open==low."""
 from __future__ import annotations
 
 import pandas as pd
 
 from market_data import resample_to_7h, resample_to_monthly
 from strategy.devils_markers import (
+    _is_open_eq_high,
+    _is_open_eq_low,
     detect_active_devils_marker,
     find_devils_markers,
 )
@@ -31,79 +33,96 @@ def _base_rows(n: int, mid: float = 100.0) -> list[dict]:
     return rows
 
 
-def test_bearish_pure_no_wick_sane_rr():
+def test_pine_open_eq_high_bearish():
+    assert _is_open_eq_high(110.0, 110.0)
+    assert not _is_open_eq_high(109.0, 110.0)
+
     rows = _base_rows(25, mid=110.0)
-    # Nearby structural low as TP
     rows[18]["Low"] = 104.0
     rows[18]["High"] = 106.0
-    rows[18]["Open"] = 105.5
-    rows[18]["Close"] = 104.5
     rows[17]["Low"] = 105.0
     rows[19]["Low"] = 105.0
 
     i = 24
-    rows[i]["Open"] = 108.0
-    rows[i]["Close"] = 109.95  # no upper wick (~2% of range)
+    # Pine: open == high, close below for short entry
+    rows[i]["Open"] = 110.0
     rows[i]["High"] = 110.0
     rows[i]["Low"] = 107.5
-    rows[i - 1]["High"] = 109.2
+    rows[i]["Close"] = 108.0
 
     df = _make_df(rows)
     sig = detect_active_devils_marker(df, ticker="TEST", timeframe="1D")
     assert sig is not None
     assert sig["direction"] == "BEARISH"
+    assert sig["devils_marker_price"] == 110.0
     assert sig["stop_loss"] == 110.0
+    assert sig["entry_price"] == 108.0
     assert sig["entry_price"] < sig["stop_loss"]
-    assert abs(sig["entry_price"] - sig["stop_loss"]) / sig["entry_price"] >= 0.0008
     assert 0.5 <= sig["rr_ratio"] <= 25.0
-    assert sig["target"] < sig["entry_price"]
 
 
-def test_rejects_zero_risk_entry_equals_sl():
-    rows = _base_rows(25, mid=110.0)
-    rows[18]["Low"] = 104.0
-    i = 24
-    rows[i]["Open"] = 110.0
-    rows[i]["Close"] = 110.0
-    rows[i]["High"] = 110.0
-    rows[i]["Low"] = 108.0
-    rows[i - 1]["High"] = 109.0
-    df = _make_df(rows)
-    assert detect_active_devils_marker(df, ticker="TEST", timeframe="1D") is None
+def test_pine_open_eq_low_bullish():
+    assert _is_open_eq_low(100.0, 100.0)
 
-
-def test_bullish_pure_no_wick_sane_rr():
     rows = _base_rows(25, mid=100.0)
     rows[18]["High"] = 106.0
     rows[18]["Low"] = 104.0
-    rows[18]["Open"] = 104.5
-    rows[18]["Close"] = 105.5
     rows[17]["High"] = 105.0
     rows[19]["High"] = 105.0
 
     i = 24
-    rows[i]["Open"] = 101.5
-    rows[i]["Close"] = 100.05  # no lower wick
+    rows[i]["Open"] = 100.0
     rows[i]["Low"] = 100.0
-    rows[i]["High"] = 102.0
-    rows[i - 1]["Low"] = 100.5
+    rows[i]["High"] = 102.5
+    rows[i]["Close"] = 101.5
 
     df = _make_df(rows)
     markers = find_devils_markers(df, ticker="TEST", timeframe="1D")
     bull = [m for m in markers if m["direction"] == "BULLISH"]
     assert bull
+    assert bull[0]["devils_marker_price"] == 100.0
+    assert bull[0]["stop_loss"] == 100.0
+    assert bull[0]["entry_price"] == 101.5
     assert bull[0]["entry_price"] > bull[0]["stop_loss"]
-    assert 0.5 <= bull[0]["rr_ratio"] <= 25.0
 
 
-def test_ignores_old_candles_outside_last_3():
+def test_invalidated_when_price_crosses_mark():
+    """Pine deletes the line when a later bar crosses the level."""
+    rows = _base_rows(25, mid=110.0)
+    rows[18]["Low"] = 104.0
+    rows[17]["Low"] = 105.0
+    rows[19]["Low"] = 105.0
+
+    i = 22  # within last 3 of n=25 → indices 22,23,24
+    rows[i]["Open"] = 110.0
+    rows[i]["High"] = 110.0
+    rows[i]["Low"] = 107.5
+    rows[i]["Close"] = 108.0
+    # Next bar crosses through 110
+    rows[i + 1]["High"] = 111.0
+    rows[i + 1]["Low"] = 109.0
+    rows[i + 1]["Open"] = 109.5
+    rows[i + 1]["Close"] = 110.5
+
+    df = _make_df(rows)
+    active = detect_active_devils_marker(df, ticker="TEST", timeframe="1D")
+    # Mark at 22 is invalidated by cross; no other valid mark
+    assert active is None
+
+    all_m = find_devils_markers(
+        df, ticker="TEST", timeframe="1D", include_invalidated=True
+    )
+    bear = [m for m in all_m if m["direction"] == "BEARISH"]
+    assert bear
+    assert bear[0]["status"] == "INVALIDATED"
+
+
+def test_ignores_old_outside_last_3():
     rows = _base_rows(30, mid=110.0)
-    rows[10]["Open"] = 108.0
-    rows[10]["Close"] = 109.85
+    rows[10]["Open"] = 110.0
     rows[10]["High"] = 110.0
-    rows[10]["Low"] = 107.5
-    rows[9]["High"] = 109.0
-    rows[11]["High"] = 109.0
+    rows[10]["Low"] = 107.0
+    rows[10]["Close"] = 108.0
     df = _make_df(rows)
     assert find_devils_markers(df, ticker="TEST", timeframe="1D") == []
 
