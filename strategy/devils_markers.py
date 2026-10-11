@@ -9,6 +9,10 @@ PIVOT_WINDOW = 3
 NO_WICK_RATIO = 0.05
 RECENT_CANDLES = 3  # analyze only bars -3, -2, -1 (0-based: n-3 .. n-1)
 MIN_RR = 1.5
+# Reject setups where Entry≈SL (zero risk) or TP is junk data
+MIN_RISK_PCT = 0.0008  # 0.08% of price min between entry and SL
+MAX_RR = 25.0  # above this, Entry/SL/TP geometry is almost certainly wrong
+MAX_TARGET_MOVE_PCT = 0.35  # TP farther than 35% from entry is discarded
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["ACTIVE", "INVALIDATED", "CLOSED_WIN", "CLOSED_LOSS"]
@@ -93,12 +97,27 @@ def _find_prior_swing_low(df: pd.DataFrame, before_i: int, window: int = PIVOT_W
     return float(df["Low"].iloc[start:before_i].min())
 
 
-def _entry_price(direction: Direction, o: float, c: float) -> float:
-    """Entry at close of the No-Wick candle (continuation setup)."""
-    return round(c, 4)
+def _entry_price(direction: Direction, o: float, h: float, l: float, c: float) -> float | None:
+    """
+    Entry on the trade side of the No-Wick SL with real risk.
+
+    Prefer Open (origin of the push into the devil extreme) so Entry≠SL
+    when the candle closes glued to the High/Low.
+    """
+    if direction == "BEARISH":
+        for x in (o, (o + c) / 2.0, c):
+            if x < h:
+                return round(x, 4)
+        return None
+    for x in (o, (o + c) / 2.0, c):
+        if x > l:
+            return round(x, 4)
+    return None
 
 
 def _compute_rr(direction: Direction, entry: float, stop: float, target: float) -> float | None:
+    if entry <= 0 or stop <= 0 or target <= 0:
+        return None
     if direction == "BULLISH":
         risk = entry - stop
         reward = target - entry
@@ -107,7 +126,16 @@ def _compute_rr(direction: Direction, entry: float, stop: float, target: float) 
         reward = entry - target
     if risk <= 0 or reward <= 0:
         return None
-    return round(reward / risk, 4)
+    # Minimum risk distance (avoid Entry≈SL → R:R millions)
+    if risk / entry < MIN_RISK_PCT:
+        return None
+    # Target must be realistic vs price
+    if reward / entry > MAX_TARGET_MOVE_PCT:
+        return None
+    rr = reward / risk
+    if rr > MAX_RR:
+        return None
+    return round(rr, 4)
 
 
 def _status_after_marker(
@@ -201,9 +229,11 @@ def find_devils_markers(
         # Bearish Devil: No-Wick swing high
         if _is_no_wick_high(o, h, l, c) and _is_local_swing_high(df, i):
             target = _find_prior_swing_low(df, i)
-            if target is None or target >= h:
+            if target is None or target >= h or target <= 0:
                 continue
-            entry = _entry_price("BEARISH", o, c)
+            entry = _entry_price("BEARISH", o, h, l, c)
+            if entry is None:
+                continue
             stop = h
             rr = _compute_rr("BEARISH", entry, stop, target)
             if rr is None:
@@ -230,9 +260,11 @@ def find_devils_markers(
         # Bullish Devil: No-Wick swing low
         if _is_no_wick_low(o, h, l, c) and _is_local_swing_low(df, i):
             target = _find_prior_swing_high(df, i)
-            if target is None or target <= l:
+            if target is None or target <= l or target <= 0:
                 continue
-            entry = _entry_price("BULLISH", o, c)
+            entry = _entry_price("BULLISH", o, h, l, c)
+            if entry is None:
+                continue
             stop = l
             rr = _compute_rr("BULLISH", entry, stop, target)
             if rr is None:
