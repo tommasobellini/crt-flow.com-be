@@ -93,6 +93,10 @@ def resample_to_weekly(df_daily: pd.DataFrame) -> pd.DataFrame:
     return _resample_ohlcv(df_daily, "W")
 
 
+def resample_to_monthly(df_daily: pd.DataFrame) -> pd.DataFrame:
+    return _resample_ohlcv(df_daily, "ME")
+
+
 def _history_with_retry(
     stock: yf.Ticker, *, period: str, interval: str
 ) -> pd.DataFrame | None:

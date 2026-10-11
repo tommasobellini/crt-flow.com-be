@@ -13,7 +13,7 @@ RECENT_LOOKBACK = 3
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["MARKER_PENDING", "CONTINUATION_ACTIVE", "INVALIDATED"]
-TfLabel = Literal["4H", "7H", "1D", "1W"]
+TfLabel = Literal["4H", "7H", "1D", "1W", "1M"]
 
 
 def _to_f(val) -> float:

@@ -14,13 +14,15 @@ from market_data import (
     clean_df,
     resample_to_4h,
     resample_to_7h,
+    resample_to_monthly,
     resample_to_weekly,
 )
 from strategy.config import TARGET_WATCHLIST, YF_PERIOD_1H, YF_PERIOD_DAILY
 from strategy.devils_markers import TfLabel, detect_active_devils_marker
 
-TIMEFRAMES: list[TfLabel] = ["4H", "7H", "1D", "1W"]
+TIMEFRAMES: list[TfLabel] = ["4H", "7H", "1D", "1W", "1M"]
 MIN_BARS = 40
+MIN_BARS_MONTHLY = 12
 
 
 def setup_supabase():
@@ -59,12 +61,16 @@ def fetch_devils_frames(ticker: str) -> tuple[dict[TfLabel, object], object]:
         "7H": None,
         "1D": None,
         "1W": None,
+        "1M": None,
     }
     if df_daily is not None and len(df_daily) >= MIN_BARS:
         frames["1D"] = df_daily
         weekly = resample_to_weekly(df_daily)
         if weekly is not None and len(weekly) >= 12:
             frames["1W"] = weekly
+        monthly = resample_to_monthly(df_daily)
+        if monthly is not None and len(monthly) >= MIN_BARS_MONTHLY:
+            frames["1M"] = monthly
 
     if df_1h is not None and not df_1h.empty:
         h4 = resample_to_4h(df_1h)
