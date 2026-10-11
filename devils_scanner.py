@@ -1,11 +1,14 @@
-"""Devil's Markers HTF scanner — isolated from IC-CISD scalping pipeline."""
+"""Devil's Markers HTF scanner — S&P 500 + NASDAQ 100, Pure No-Wick."""
 from __future__ import annotations
 
 import argparse
+import io
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
+import pandas as pd
+import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from supabase import create_client
@@ -17,12 +20,13 @@ from market_data import (
     resample_to_monthly,
     resample_to_weekly,
 )
-from strategy.config import TARGET_WATCHLIST, YF_PERIOD_1H, YF_PERIOD_DAILY
+from strategy.config import YF_PERIOD_1H
 from strategy.devils_markers import TfLabel, detect_active_devils_marker
 
 TIMEFRAMES: list[TfLabel] = ["4H", "7H", "1D", "1W", "1M"]
 MIN_BARS = 40
 MIN_BARS_MONTHLY = 12
+YF_PERIOD_DAILY_LONG = "5y"
 
 
 def setup_supabase():
@@ -39,6 +43,71 @@ def setup_supabase():
     return create_client(url, key)
 
 
+def _normalize_tickers(raw: list) -> list[str]:
+    out: list[str] = []
+    for t in raw:
+        if not isinstance(t, str):
+            continue
+        sym = t.strip().replace(".", "-")
+        if sym and len(sym) <= 8 and " " not in sym:
+            out.append(sym.upper())
+    return out
+
+
+def get_sp500_tickers() -> list[str]:
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        table = pd.read_html(io.StringIO(response.text))
+        return _normalize_tickers(table[0]["Symbol"].tolist())
+    except Exception as e:
+        print(f"SP500 fetch error: {e}")
+        return ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"]
+
+
+def get_nasdaq100_tickers() -> list[str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    sources = [
+        ("stockanalysis", "https://stockanalysis.com/list/nasdaq-100-stocks/"),
+        ("wikipedia", "https://en.wikipedia.org/wiki/Nasdaq-100"),
+    ]
+    for label, url in sources:
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            tables = pd.read_html(io.StringIO(response.text))
+            for table in tables:
+                col = "Symbol" if "Symbol" in table.columns else (
+                    "Ticker" if "Ticker" in table.columns else None
+                )
+                if col is None:
+                    continue
+                tickers = _normalize_tickers(table[col].tolist())
+                if len(tickers) >= 80:
+                    print(f"NASDAQ 100: {len(tickers)} ({label})")
+                    return tickers
+        except Exception as e:
+            print(f"NASDAQ 100 ({label}): {e}")
+    return [
+        "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "AVGO", "COST",
+        "NFLX", "AMD", "PEP", "ADBE", "CSCO", "TMUS", "INTC", "INTU", "QCOM", "AMAT",
+    ]
+
+
+def get_universe() -> list[str]:
+    sp = get_sp500_tickers()
+    nd = get_nasdaq100_tickers()
+    print(f"S&P 500: {len(sp)} | NASDAQ 100: {len(nd)}")
+    return sorted(set(sp + nd))
+
+
 def _history(stock: yf.Ticker, *, period: str, interval: str):
     try:
         raw = stock.history(period=period, interval=interval, auto_adjust=True)
@@ -50,10 +119,9 @@ def _history(stock: yf.Ticker, *, period: str, interval: str):
         return None
 
 
-def fetch_devils_frames(ticker: str) -> tuple[dict[TfLabel, object], object]:
-    """Return (HTF frames dict, 1H frame for optional LTF CISD confirm)."""
+def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
     stock = yf.Ticker(ticker)
-    df_daily = _history(stock, period=YF_PERIOD_DAILY, interval="1d")
+    df_daily = _history(stock, period=YF_PERIOD_DAILY_LONG, interval="1d")
     df_1h = _history(stock, period=YF_PERIOD_1H, interval="1h")
 
     frames: dict[TfLabel, object] = {
@@ -80,7 +148,7 @@ def fetch_devils_frames(ticker: str) -> tuple[dict[TfLabel, object], object]:
         if len(h7) >= MIN_BARS:
             frames["7H"] = h7
 
-    return frames, df_1h
+    return frames
 
 
 def signal_to_row(signal: dict) -> dict:
@@ -89,16 +157,23 @@ def signal_to_row(signal: dict) -> dict:
         "timeframe": signal["timeframe"],
         "direction": signal["direction"],
         "devils_marker_price": signal["devils_marker_price"],
-        "cisd_level": signal["cisd_level"],
-        "is_cisd_broken": signal["is_cisd_broken"],
+        "entry_price": signal["entry_price"],
+        "cisd_level": signal.get("cisd_level") or signal["entry_price"],
+        "is_cisd_broken": True,
         "status": signal["status"],
         "stop_loss": signal["stop_loss"],
         "target": signal["target"],
+        "rr_ratio": signal.get("rr_ratio"),
+        "result": None,
+        "exit_reason": None,
+        "closed_at": None,
+        "is_active": signal["status"] == "ACTIVE",
         "pattern_at": signal.get("pattern_at"),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "meta": {
-            "cisd_label": signal.get("cisd_label"),
             "pattern_unix": signal.get("pattern_unix"),
+            "is_high_rr": signal.get("is_high_rr"),
+            "strategy": "pure_no_wick",
         },
     }
 
@@ -107,10 +182,26 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
     if dry_run:
         print(
             f"  [dry-run] {row['symbol']} {row['timeframe']} "
-            f"{row['direction']} {row['status']} "
-            f"devil={row['devils_marker_price']} cisd={row['cisd_level']}"
+            f"{row['direction']} RR={row.get('rr_ratio')} "
+            f"SL={row['stop_loss']} TP={row['target']}"
         )
         return
+    # Do not overwrite already closed outcomes
+    existing = (
+        supabase.table("devils_signals")
+        .select("id, result, status")
+        .eq("symbol", row["symbol"])
+        .eq("timeframe", row["timeframe"])
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        prev = existing.data[0]
+        if prev.get("result") in ("WIN", "LOSS") or prev.get("status") in (
+            "CLOSED_WIN",
+            "CLOSED_LOSS",
+        ):
+            return
     supabase.table("devils_signals").upsert(
         row, on_conflict="symbol,timeframe"
     ).execute()
@@ -123,19 +214,14 @@ def scan_ticker(
     dry_run: bool = False,
     persist: bool = True,
 ) -> list[dict]:
-    frames, df_1h = fetch_devils_frames(ticker)
+    frames = fetch_devils_frames(ticker)
     results: list[dict] = []
 
     for tf in TIMEFRAMES:
         df = frames.get(tf)
         if df is None or getattr(df, "empty", True):
             continue
-        sig = detect_active_devils_marker(
-            df,
-            ticker=ticker,
-            timeframe=tf,
-            df_ltf=df_1h,
-        )
+        sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf)
         if sig is None:
             continue
         results.append(sig)
@@ -146,21 +232,30 @@ def scan_ticker(
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Devil's Markers HTF Scanner")
-    p.add_argument("--symbol", type=str, default=None, help="Single ticker")
-    p.add_argument("--workers", type=int, default=8)
+    p = argparse.ArgumentParser(description="Devil's Markers Pure No-Wick Scanner")
+    p.add_argument("--symbol", type=str, default=None)
+    p.add_argument("--workers", type=int, default=10)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-persist", action="store_true")
+    p.add_argument(
+        "--universe",
+        choices=["sp500_nasdaq", "watchlist"],
+        default="sp500_nasdaq",
+    )
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    tickers = (
-        [args.symbol.strip().upper()]
-        if args.symbol
-        else list(TARGET_WATCHLIST)
-    )
+    if args.symbol:
+        tickers = [args.symbol.strip().upper()]
+    elif args.universe == "watchlist":
+        from strategy.config import TARGET_WATCHLIST
+
+        tickers = list(TARGET_WATCHLIST)
+    else:
+        tickers = get_universe()
+
     persist = not args.no_persist
     dry_run = args.dry_run
 
@@ -168,17 +263,14 @@ def main():
     if persist and not dry_run:
         supabase = setup_supabase()
 
-    print(f"Devil's Markers scan — {len(tickers)} tickers, TFs={TIMEFRAMES}")
+    print(f"Devil's Markers Pure No-Wick — {len(tickers)} tickers, TFs={TIMEFRAMES}")
     total = 0
     errors = 0
 
     def _job(sym: str) -> tuple[str, list[dict], str | None]:
         try:
             sigs = scan_ticker(
-                sym,
-                supabase=supabase,
-                dry_run=dry_run,
-                persist=persist,
+                sym, supabase=supabase, dry_run=dry_run, persist=persist
             )
             return sym, sigs, None
         except Exception as exc:
@@ -193,7 +285,8 @@ def main():
                 print(f"[{sym}] error: {err}")
             else:
                 total += len(sigs)
-                print(f"[{sym}] {len(sigs)} marker(s)" if sigs else f"[{sym}] none")
+                if sigs:
+                    print(f"[{sym}] {len(sigs)} marker(s)")
 
     print(f"Done. markers={total} errors={errors}")
 

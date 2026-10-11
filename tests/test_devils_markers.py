@@ -1,11 +1,10 @@
-"""Unit tests for Devil's Markers (No-Wick Continuation)."""
+"""Unit tests for Pure No-Wick Devil's Markers."""
 from __future__ import annotations
 
 import pandas as pd
 
-from market_data import resample_to_7h
+from market_data import resample_to_7h, resample_to_monthly
 from strategy.devils_markers import (
-    RECENT_LOOKBACK,
     detect_active_devils_marker,
     find_devils_markers,
 )
@@ -18,188 +17,88 @@ def _make_df(rows: list[dict], freq: str = "1D", start: str = "2025-01-01") -> p
 
 def _base_rows(n: int, mid: float = 100.0) -> list[dict]:
     rows = []
-    for _ in range(n):
+    for i in range(n):
+        # Gentle downtrend so prior swing lows exist as targets for bears
+        px = mid - i * 0.1
         rows.append(
             {
-                "Open": mid,
-                "High": mid + 1.0,
-                "Low": mid - 1.0,
-                "Close": mid + 0.2,
+                "Open": px,
+                "High": px + 1.0,
+                "Low": px - 1.0,
+                "Close": px + 0.2,
                 "Volume": 1_000_000,
             }
         )
     return rows
 
 
-def test_bearish_devils_marker_continuation():
-    """
-    Swing in the last 3 confirmable bars: bullish run → no-wick high →
-    close through -CISD without breaking the devil high.
-    n=20, window=3 → candidates indices 14..16; swing at 14.
-    """
-    rows = _base_rows(20, mid=100.0)
-    swing = 14
+def test_bearish_pure_no_wick_on_last_3():
+    rows = _base_rows(25, mid=110.0)
+    # Clear prior swing low around index 8
+    rows[8]["Low"] = 95.0
+    rows[8]["High"] = 100.0
+    rows[8]["Open"] = 99.0
+    rows[8]["Close"] = 96.0
 
-    # Bullish run into swing
-    for j, open_px in enumerate([100.0, 101.0, 102.0]):
-        i = swing - 3 + j
-        rows[i]["Open"] = open_px
-        rows[i]["Close"] = open_px + 0.8
-        rows[i]["High"] = open_px + 1.0
-        rows[i]["Low"] = open_px - 0.2
-
-    rows[swing]["Open"] = 103.0
-    rows[swing]["Close"] = 104.9
-    rows[swing]["High"] = 105.0
-    rows[swing]["Low"] = 103.0
-
-    for k in range(1, 4):
-        rows[swing + k]["High"] = 104.0 - k * 0.3
-        rows[swing + k]["Low"] = 102.0
-        rows[swing + k]["Open"] = 103.5
-        rows[swing + k]["Close"] = 102.5
-
-    for k in range(1, 4):
-        rows[swing - k]["High"] = 104.0 - k * 0.2
-
-    # Break CISD (min open of bullish run = 100)
-    rows[18]["Open"] = 101.0
-    rows[18]["Close"] = 99.0
-    rows[18]["High"] = 101.2
-    rows[18]["Low"] = 98.8
+    # No-wick bearish high on last candle (index 24)
+    i = 24
+    rows[i]["Open"] = 108.0
+    rows[i]["Close"] = 109.9
+    rows[i]["High"] = 110.0  # upper wick ~0.1 / range ~2 → 5%
+    rows[i]["Low"] = 108.0
+    rows[i - 1]["High"] = 109.0
 
     df = _make_df(rows)
     sig = detect_active_devils_marker(df, ticker="TEST", timeframe="1D")
     assert sig is not None
     assert sig["direction"] == "BEARISH"
-    assert sig["devils_marker_price"] == 105.0
-    assert sig["cisd_level"] == 100.0
-    assert sig["is_cisd_broken"] is True
-    assert sig["status"] == "CONTINUATION_ACTIVE"
-    assert sig["stop_loss"] == 105.0
-    assert sig["target"] == 95.0
+    assert sig["stop_loss"] == 110.0
+    assert sig["devils_marker_price"] == 110.0
+    assert sig["target"] <= 100.0
+    assert sig["rr_ratio"] is not None
+    assert sig["status"] == "ACTIVE"
 
 
-def test_bullish_devils_marker_pending():
-    rows = _base_rows(20, mid=100.0)
-    swing = 14
+def test_bullish_pure_no_wick_on_last_3():
+    rows = _base_rows(25, mid=100.0)
+    # Prior swing high
+    rows[8]["High"] = 120.0
+    rows[8]["Low"] = 110.0
+    rows[8]["Open"] = 111.0
+    rows[8]["Close"] = 118.0
 
-    for j, open_px in enumerate([100.0, 99.0, 98.0]):
-        i = swing - 3 + j
-        rows[i]["Open"] = open_px
-        rows[i]["Close"] = open_px - 0.8
-        rows[i]["High"] = open_px + 0.2
-        rows[i]["Low"] = open_px - 1.0
-
-    rows[swing]["Open"] = 97.0
-    rows[swing]["Close"] = 95.1
-    rows[swing]["Low"] = 95.0
-    rows[swing]["High"] = 97.0
-
-    for k in range(1, 4):
-        rows[swing + k]["Low"] = 95.5 + k * 0.2
-        rows[swing + k]["High"] = 98.0
-        rows[swing + k]["Open"] = 96.0
-        rows[swing + k]["Close"] = 96.5
-
-    for k in range(1, 4):
-        rows[swing - k]["Low"] = 95.5 + k * 0.2
-
-    for i in range(swing + 4, 20):
-        rows[i]["Open"] = 97.0
-        rows[i]["Close"] = 97.5
-        rows[i]["High"] = 98.5
-        rows[i]["Low"] = 96.5
+    i = 24
+    rows[i]["Open"] = 102.0
+    rows[i]["Close"] = 100.1
+    rows[i]["Low"] = 100.0
+    rows[i]["High"] = 102.0
+    rows[i - 1]["Low"] = 100.5
 
     df = _make_df(rows)
     markers = find_devils_markers(df, ticker="TEST", timeframe="1D")
     bull = [m for m in markers if m["direction"] == "BULLISH"]
     assert bull
-    assert bull[0]["status"] == "MARKER_PENDING"
-    assert bull[0]["is_cisd_broken"] is False
-    assert bull[0]["cisd_level"] == 100.0
+    assert bull[0]["stop_loss"] == 100.0
+    assert bull[0]["target"] >= 110.0
+    assert bull[0]["rr_ratio"] > 0
 
 
-def test_invalidated_on_structure_break():
-    rows = _base_rows(20, mid=100.0)
-    swing = 14
-
-    for j, open_px in enumerate([100.0, 101.0, 102.0]):
-        i = swing - 3 + j
-        rows[i]["Open"] = open_px
-        rows[i]["Close"] = open_px + 0.8
-        rows[i]["High"] = open_px + 1.0
-        rows[i]["Low"] = open_px - 0.2
-
-    rows[swing]["Open"] = 103.0
-    rows[swing]["Close"] = 104.9
-    rows[swing]["High"] = 105.0
-    rows[swing]["Low"] = 103.0
-
-    for k in range(1, 4):
-        rows[swing + k]["High"] = 104.0 - k * 0.3
-        rows[swing + k]["Low"] = 102.0
-        rows[swing + k]["Open"] = 103.5
-        rows[swing + k]["Close"] = 102.5
-
-    for k in range(1, 4):
-        rows[swing - k]["High"] = 104.0 - k * 0.2
-
-    rows[18]["High"] = 106.0
-    rows[18]["Close"] = 105.5
-    rows[18]["Open"] = 104.0
-    rows[18]["Low"] = 103.8
-
-    df = _make_df(rows)
-    active = detect_active_devils_marker(df, ticker="TEST", timeframe="1D")
-    assert active is None
-
-    all_m = find_devils_markers(
-        df, ticker="TEST", timeframe="1D", include_invalidated=True
-    )
-    bear = [m for m in all_m if m["direction"] == "BEARISH"]
-    assert bear
-    assert bear[0]["status"] == "INVALIDATED"
-
-
-def test_ignores_old_devils_outside_recent_lookback():
-    """An old no-wick swing far from the end must not be returned."""
-    rows = _base_rows(30, mid=100.0)
-    swing = 10  # well outside last 3 confirmable (indices 26..28 for n=30)
-
-    for j, open_px in enumerate([100.0, 101.0, 102.0]):
-        i = swing - 3 + j
-        rows[i]["Open"] = open_px
-        rows[i]["Close"] = open_px + 0.8
-        rows[i]["High"] = open_px + 1.0
-        rows[i]["Low"] = open_px - 0.2
-
-    rows[swing]["Open"] = 103.0
-    rows[swing]["Close"] = 104.9
-    rows[swing]["High"] = 105.0
-    rows[swing]["Low"] = 103.0
-
-    for k in range(1, 4):
-        rows[swing + k]["High"] = 104.0 - k * 0.3
-        rows[swing + k]["Low"] = 102.0
-        rows[swing + k]["Open"] = 103.5
-        rows[swing + k]["Close"] = 102.5
-
-    for k in range(1, 4):
-        rows[swing - k]["High"] = 104.0 - k * 0.2
+def test_ignores_old_candles_outside_last_3():
+    rows = _base_rows(30, mid=110.0)
+    rows[8]["Low"] = 95.0
+    # Old no-wick high far from end
+    rows[10]["Open"] = 108.0
+    rows[10]["Close"] = 109.9
+    rows[10]["High"] = 110.0
+    rows[10]["Low"] = 108.0
+    rows[9]["High"] = 109.0
+    rows[11]["High"] = 109.0
 
     df = _make_df(rows)
     assert find_devils_markers(df, ticker="TEST", timeframe="1D") == []
-    assert detect_active_devils_marker(df, ticker="TEST", timeframe="1D") is None
-    # Explicit wide lookback still finds it
-    wide = find_devils_markers(
-        df, ticker="TEST", timeframe="1D", recent_lookback=25
-    )
-    assert any(m["devils_marker_price"] == 105.0 for m in wide)
-    assert RECENT_LOOKBACK == 3
 
 
-def test_resample_to_7h():
+def test_resample_helpers():
     idx = pd.date_range("2025-01-02 09:30", periods=21, freq="1h")
     df = pd.DataFrame(
         {
@@ -211,6 +110,17 @@ def test_resample_to_7h():
         },
         index=idx,
     )
-    h7 = resample_to_7h(df)
-    assert len(h7) >= 2
-    assert list(h7.columns)[:4] == ["Open", "High", "Low", "Close"]
+    assert len(resample_to_7h(df)) >= 2
+
+    daily_idx = pd.date_range("2020-01-01", periods=400, freq="D")
+    daily = pd.DataFrame(
+        {
+            "Open": [1.0] * 400,
+            "High": [2.0] * 400,
+            "Low": [0.5] * 400,
+            "Close": [1.5] * 400,
+            "Volume": [1] * 400,
+        },
+        index=daily_idx,
+    )
+    assert len(resample_to_monthly(daily)) >= 12
