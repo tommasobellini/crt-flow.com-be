@@ -19,8 +19,8 @@ from supabase import Client, create_client
 
 from market_data import (
     clean_df,
+    drop_unclosed,
     resample_to_4h,
-    resample_to_7h,
     resample_to_monthly,
     resample_to_weekly,
 )
@@ -68,19 +68,21 @@ def _parse_ts(value: str | None) -> pd.Timestamp | None:
 def bars_for_tf(symbol: str, timeframe: str) -> pd.DataFrame | None:
     tf = (timeframe or "1D").upper()
     try:
-        if tf in ("4H", "7H"):
+        if tf == "7H":
+            logger.info(f"  {symbol} 7H: timeframe removed, skipping")
+            return None
+        if tf == "4H":
             raw = yf.Ticker(symbol).history(period="730d", interval="1h", auto_adjust=True)
             df = clean_df(raw.dropna() if raw is not None else None)
             if df is None or df.empty:
                 return None
-            if getattr(df.index, "tz", None) is not None:
-                df.index = df.index.tz_convert(None)
-            return resample_to_4h(df) if tf == "4H" else resample_to_7h(df)
+            return resample_to_4h(df)  # session-aligned, closed bars only
 
         raw = yf.Ticker(symbol).history(period="5y", interval="1d", auto_adjust=True)
         df = clean_df(raw.dropna() if raw is not None else None)
         if df is None or df.empty:
             return None
+        df = drop_unclosed(df, "1d")
         if getattr(df.index, "tz", None) is not None:
             df.index = df.index.tz_convert(None)
         if tf == "1W":

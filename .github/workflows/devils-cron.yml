@@ -2,8 +2,13 @@ name: CRT Devil's Markers Scanner
 
 on:
   schedule:
-    # Every 4 hours, Mon–Fri (UTC) — HTF friendly
-    - cron: "15 0,4,8,12,16,20 * * 1-5"
+    # Just after the session-aligned 4H closes (America/New_York):
+    #   bar A closes 13:30 ET -> 17:30 UTC (EDT) / 18:30 UTC (EST)
+    #   bar B closes 16:00 ET -> 20:00 UTC (EDT) / 21:00 UTC (EST), also daily/weekly/monthly close
+    # GitHub cron is UTC-only, so both DST candidates run (+10 min Yahoo buffer).
+    # Off-season runs are harmless: market_data drops unclosed bars and upserts are idempotent.
+    - cron: "40 17,18 * * 1-5"
+    - cron: "10 20,21 * * 1-5"
   workflow_dispatch:
 
 jobs:

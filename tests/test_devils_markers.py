@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from market_data import resample_to_7h, resample_to_monthly
+from market_data import resample_to_4h, resample_to_monthly
 from strategy.devils_markers import (
     _is_open_eq_high,
     _is_open_eq_low,
@@ -128,7 +128,7 @@ def test_ignores_old_outside_last_3():
 
 
 def test_resample_helpers():
-    idx = pd.date_range("2025-01-02 09:30", periods=21, freq="1h")
+    idx = pd.date_range("2025-01-02 09:30", periods=21, freq="1h", tz="America/New_York")
     df = pd.DataFrame(
         {
             "Open": [100.0] * 21,
@@ -139,7 +139,7 @@ def test_resample_helpers():
         },
         index=idx,
     )
-    assert len(resample_to_7h(df)) >= 2
+    assert len(resample_to_4h(df)) >= 2
     daily_idx = pd.date_range("2020-01-01", periods=400, freq="D")
     daily = pd.DataFrame(
         {

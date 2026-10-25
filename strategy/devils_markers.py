@@ -30,7 +30,7 @@ PRICE_EQ_TOL = 1e-6
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["ACTIVE", "INVALIDATED", "CLOSED_WIN", "CLOSED_LOSS"]
-TfLabel = Literal["4H", "7H", "1D", "1W", "1M"]
+TfLabel = Literal["4H", "1D", "1W", "1M"]
 
 
 def _to_f(val) -> float:

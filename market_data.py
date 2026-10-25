@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -66,35 +67,150 @@ def clean_df(df: pd.DataFrame | None) -> pd.DataFrame | None:
     return df
 
 
-def _resample_ohlcv(df_src: pd.DataFrame, rule: str) -> pd.DataFrame:
-    df = df_src.copy()
-    if getattr(df.index, "tz", None) is not None:
-        df.index = df.index.tz_convert(None)
-    agg = {
-        "Open": "first",
-        "High": "max",
-        "Low": "min",
-        "Close": "last",
-    }
+NY_TZ = "America/New_York"
+SESSION_OPEN = pd.Timedelta(hours=9, minutes=30)
+SESSION_MID = pd.Timedelta(hours=13, minutes=30)
+SESSION_CLOSE = pd.Timedelta(hours=16)
+_INTRADAY_DURATION = {
+    "1m": pd.Timedelta(minutes=1),
+    "5m": pd.Timedelta(minutes=5),
+    "15m": pd.Timedelta(minutes=15),
+    "30m": pd.Timedelta(minutes=30),
+    "1h": pd.Timedelta(hours=1),
+    "60m": pd.Timedelta(hours=1),
+}
+
+
+def _ohlcv_agg(df: pd.DataFrame) -> dict:
+    agg = {"Open": "first", "High": "max", "Low": "min", "Close": "last"}
     if "Volume" in df.columns:
         agg["Volume"] = "sum"
-    return df.resample(rule).agg(agg).dropna()
+    return agg
 
 
-def resample_to_4h(df_1h: pd.DataFrame) -> pd.DataFrame:
-    return _resample_ohlcv(df_1h, "4h")
+def _index_to_ny(index: pd.Index) -> pd.DatetimeIndex:
+    """Naive timestamps are treated as UTC (legacy convention of this module)."""
+    idx = pd.DatetimeIndex(index)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx.tz_convert(NY_TZ)
 
 
-def resample_to_7h(df_1h: pd.DataFrame) -> pd.DataFrame:
-    return _resample_ohlcv(df_1h, "7h")
+def _now_ny(now: pd.Timestamp | None) -> pd.Timestamp:
+    ts = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert(NY_TZ)
 
 
-def resample_to_weekly(df_daily: pd.DataFrame) -> pd.DataFrame:
-    return _resample_ohlcv(df_daily, "W")
+def _naive_utc(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    return idx.tz_convert("UTC").tz_localize(None)
 
 
-def resample_to_monthly(df_daily: pd.DataFrame) -> pd.DataFrame:
-    return _resample_ohlcv(df_daily, "ME")
+def _resample_ohlcv(df_src: pd.DataFrame, rule: str) -> pd.DataFrame:
+    """Calendar resample (weekly / monthly) on New York dates. Index: naive UTC."""
+    df = df_src.copy()
+    df.index = _ny_dates(df.index).tz_localize(None)  # NY calendar dates
+    out = df.resample(rule).agg(_ohlcv_agg(df)).dropna()
+    out.index = _naive_utc(out.index.tz_localize(NY_TZ))
+    return out
+
+
+def regular_session_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep intraday bars that start within 09:30-16:00 America/New_York."""
+    if df is None or df.empty:
+        return df
+    ny = _index_to_ny(df.index)
+    tod = ny - ny.normalize()
+    mask = (tod >= SESSION_OPEN) & (tod < SESSION_CLOSE)
+    return df.loc[mask]
+
+
+def resample_to_4h(
+    df_1h: pd.DataFrame,
+    now: pd.Timestamp | None = None,
+    *,
+    drop_forming: bool = True,
+) -> pd.DataFrame:
+    """
+    4H bars aligned to the US regular session (TradingView style), DST-safe:
+      bar A 09:30-13:30 ET, bar B 13:30-16:00 ET. Extended hours are dropped.
+    Bars not yet closed at `now` are dropped unless drop_forming=False
+    (IC-CISD needs the *current* HTF candle). Index: bar start as naive UTC.
+    """
+    if df_1h is None or df_1h.empty:
+        return df_1h
+    df = regular_session_only(df_1h).copy()
+    if df.empty:
+        return df
+    ny = _index_to_ny(df.index)
+    day = ny.normalize()
+    tod = ny - day
+    start = day + SESSION_OPEN
+    start = start.where(tod < SESSION_MID, day + SESSION_MID)
+    df.index = start
+    out = df.groupby(level=0, sort=True).agg(_ohlcv_agg(df)).dropna()
+    starts = pd.DatetimeIndex(out.index)
+    days = starts.normalize()
+    nominal_end = (days + SESSION_MID).where(
+        starts < days + SESSION_MID, days + SESSION_CLOSE
+    )
+    now_ny = _now_ny(now)
+    # Closed if nominal end passed, or the session day is over (half days).
+    closed = (nominal_end <= now_ny) | (days < now_ny.normalize())
+    if drop_forming:
+        out = out.loc[closed]
+    out.index = _naive_utc(pd.DatetimeIndex(out.index))
+    return out
+
+
+def resample_to_weekly(df_daily: pd.DataFrame, now: pd.Timestamp | None = None) -> pd.DataFrame:
+    out = _resample_ohlcv(df_daily, "W-FRI")
+    return drop_unclosed(out, "1W", now=now)
+
+
+def resample_to_monthly(df_daily: pd.DataFrame, now: pd.Timestamp | None = None) -> pd.DataFrame:
+    out = _resample_ohlcv(df_daily, "ME")
+    return drop_unclosed(out, "1M", now=now)
+
+
+def drop_unclosed(
+    df: pd.DataFrame | None, interval: str, now: pd.Timestamp | None = None
+) -> pd.DataFrame | None:
+    """
+    Drop bars whose end is after `now` (forming bars repaint).
+    interval: 5m/15m/1h (index = bar start), 1d (index = session date),
+    1W (index = week-ending Friday), 1M (index = month end). 4H: use resample_to_4h.
+    """
+    if df is None or df.empty:
+        return df
+    now_ny = _now_ny(now)
+    iv = interval.strip()
+    # "1M" = month; minutes use lowercase "1m"
+    if iv not in ("1d", "1D", "1W", "1M") and iv.lower() in _INTRADAY_DURATION:
+        ny = _index_to_ny(df.index)
+        end = ny + _INTRADAY_DURATION[iv.lower()]
+        close_cap = ny.normalize() + SESSION_CLOSE
+        end = end.where(end <= close_cap, close_cap)
+    else:
+        d = _ny_dates(df.index)
+        if iv.upper() == "1M":
+            # month end on a weekend -> last Friday
+            shift = pd.to_timedelta(np.maximum(np.asarray(d.weekday) - 4, 0), unit="D")
+            d = d - shift
+        elif iv.upper() not in ("1D", "1W"):
+            raise ValueError(f"unsupported interval {interval}")
+        end = d + SESSION_CLOSE
+    return df.loc[end <= now_ny]
+
+
+def _ny_dates(index: pd.Index) -> pd.DatetimeIndex:
+    """Calendar dates (NY midnight, aware) for daily-or-higher bars.
+    Naive midnight timestamps are plain dates; other naive values are UTC."""
+    idx = pd.DatetimeIndex(index)
+    if idx.tz is None and (idx == idx.normalize()).all():
+        return idx.tz_localize(NY_TZ)
+    return _index_to_ny(idx).normalize()
 
 
 def _history_with_retry(
@@ -177,10 +293,13 @@ def _frames_from_ohlc(
 
     df_4h = None
     if df_1h is not None and not df_1h.empty:
-        df_4h = resample_to_4h(df_1h)
+        # IC-CISD times the LTF entry inside the *current* HTF candle → keep it.
+        df_4h = resample_to_4h(df_1h, drop_forming=False)
         if df_4h.empty or len(df_4h) < MIN_BARS_4H:
             df_4h = None
 
+    df_15m = drop_unclosed(df_15m, "15m")
+    df_5m = drop_unclosed(df_5m, "5m")
     if df_15m is not None and (df_15m.empty or len(df_15m) < MIN_BARS_15M):
         df_15m = None
     if df_5m is not None and (df_5m.empty or len(df_5m) < MIN_BARS_5M):

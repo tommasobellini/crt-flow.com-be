@@ -131,7 +131,7 @@ def test_signal_adapter_ha_rsi():
 
 
 def test_clean_df_flattens_yfinance_multiindex():
-    idx = pd.date_range("2024-01-01", periods=3, freq="1h")
+    idx = pd.date_range("2024-01-01", periods=3, freq="1h", tz="America/New_York") + pd.Timedelta(hours=10)
     raw = pd.DataFrame(
         {
             ("Close", "VTR"): [10.0, 11.0, 12.0],

@@ -15,15 +15,16 @@ from supabase import create_client
 
 from market_data import (
     clean_df,
+    drop_unclosed,
     resample_to_4h,
-    resample_to_7h,
     resample_to_monthly,
     resample_to_weekly,
 )
 from strategy.config import YF_PERIOD_1H
 from strategy.devils_markers import TfLabel, detect_active_devils_marker
 
-TIMEFRAMES: list[TfLabel] = ["4H", "7H", "1D", "1W", "1M"]
+# 7H removed: not a session-aligned timeframe (no TradingView equivalent).
+TIMEFRAMES: list[TfLabel] = ["4H", "1D", "1W", "1M"]
 MIN_BARS = 40
 MIN_BARS_MONTHLY = 12
 YF_PERIOD_DAILY_LONG = "5y"
@@ -126,11 +127,12 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
 
     frames: dict[TfLabel, object] = {
         "4H": None,
-        "7H": None,
         "1D": None,
         "1W": None,
         "1M": None,
     }
+    # Only closed bars: a forming candle can show open==high/low and then repaint.
+    df_daily = drop_unclosed(df_daily, "1d")
     if df_daily is not None and len(df_daily) >= MIN_BARS:
         frames["1D"] = df_daily
         weekly = resample_to_weekly(df_daily)
@@ -141,12 +143,9 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
             frames["1M"] = monthly
 
     if df_1h is not None and not df_1h.empty:
-        h4 = resample_to_4h(df_1h)
-        h7 = resample_to_7h(df_1h)
+        h4 = resample_to_4h(df_1h)  # regular session, closed bars only
         if len(h4) >= MIN_BARS:
             frames["4H"] = h4
-        if len(h7) >= MIN_BARS:
-            frames["7H"] = h7
 
     return frames
 
