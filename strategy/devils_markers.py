@@ -26,7 +26,7 @@ MIN_RISK_PCT = 0.0008
 MAX_RR = 25.0
 MAX_TARGET_MOVE_PCT = 0.35
 # Float tolerance for open==high / open==low (Yahoo rarely exact)
-PRICE_EQ_TOL = 1e-6
+PRICE_EQ_TOL = 1e-4  # relative 0.01% (Strategist decision, see bt_ab)
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["ACTIVE", "INVALIDATED", "CLOSED_WIN", "CLOSED_LOSS"]

@@ -172,6 +172,8 @@ def signal_to_row(signal: dict) -> dict:
         "closed_at": None,
         "is_active": signal["status"] == "ACTIVE",
         "pattern_at": signal.get("pattern_at"),
+        "strategy": "pure_no_wick",
+        "is_paper": False,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "meta": {
             "pattern_unix": signal.get("pattern_unix"),
@@ -195,6 +197,8 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
         .select("id, result, status")
         .eq("symbol", row["symbol"])
         .eq("timeframe", row["timeframe"])
+        .eq("direction", row["direction"])
+        .eq("pattern_at", row["pattern_at"])
         .limit(1)
         .execute()
     )
@@ -206,7 +210,7 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
         ):
             return
     supabase.table("devils_signals").upsert(
-        row, on_conflict="symbol,timeframe"
+        row, on_conflict="strategy,symbol,timeframe,direction,pattern_at"
     ).execute()
 
 
