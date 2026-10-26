@@ -13,9 +13,40 @@ from __future__ import annotations
 import argparse
 import time
 
-from devils_scanner import TIMEFRAMES, fetch_devils_frames, signal_to_row, upsert_signal
+from devils_scanner import TIMEFRAMES, fetch_devils_frames, get_universe, signal_to_row
 from devils_outcome_resolver import setup_logging, setup_supabase
 from strategy.devils_markers import find_devils_markers
+
+
+KEY = ("timeframe", "direction", "pattern_at")
+
+
+def _write_symbol(sb, symbol, rows, dry_run):
+    """One select + chunked upserts per symbol (instead of 2 requests per signal).
+    Rebuilds the client and retries when Supabase drops the HTTP/2 connection."""
+    if dry_run or not rows:
+        return sb
+    for attempt in range(4):
+        try:
+            closed = (
+                sb.table("devils_signals").select("timeframe,direction,pattern_at,result,status")
+                .eq("strategy", "pure_no_wick").eq("symbol", symbol).execute().data or []
+            )
+            done = {tuple(str(r[k]) for k in KEY) for r in closed
+                    if r.get("result") in ("WIN", "LOSS") or r.get("status") in ("CLOSED_WIN", "CLOSED_LOSS")}
+            todo = [r for r in rows if tuple(str(r[k]) for k in KEY) not in done]
+            for i in range(0, len(todo), 500):
+                sb.table("devils_signals").upsert(
+                    todo[i:i + 500], on_conflict="strategy,symbol,timeframe,direction,pattern_at"
+                ).execute()
+            return sb
+        except Exception as e:  # httpx RemoteProtocolError / ConnectionTerminated
+            if attempt == 3:
+                raise
+            print(f"  ! write failed ({type(e).__name__}), new client, retry {attempt + 1}")
+            time.sleep(2 * (attempt + 1))
+            sb = setup_supabase()
+    return sb
 
 
 def main() -> None:
@@ -23,7 +54,8 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--symbol", default=None)
-    p.add_argument("--symbols", default=None, help="comma-separated list (default: symbols already in devils_signals)")
+    p.add_argument("--symbols", default=None, help="comma-separated list (default: scanner universe S&P 500 + NASDAQ 100)")
+    p.add_argument("--start-from", default=None, help="skip symbols before this one (resume)")
     a = p.parse_args()
     sb = setup_supabase()
     if a.symbol:
@@ -31,11 +63,13 @@ def main() -> None:
     elif a.symbols:
         syms = a.symbols.split(",")
     else:
-        rows = sb.table("devils_signals").select("symbol").limit(5000).execute().data or []
-        syms = sorted({r["symbol"] for r in rows})
+        syms = get_universe()  # same S&P 500 + NASDAQ 100 universe as the live scanner
+    if a.start_from:
+        syms = syms[syms.index(a.start_from.upper()):]
     total = {"ACTIVE": 0, "CLOSED_WIN": 0, "CLOSED_LOSS": 0}
     missing: list[str] = []
     for t in syms:
+        sb = setup_supabase()  # fresh connection per symbol
         frames = {}
         for attempt in range(3):  # Yahoo throttles long runs: retry before giving up
             frames = fetch_devils_frames(t) or {}
@@ -47,6 +81,7 @@ def main() -> None:
             print(f"  ! {t}: no data from Yahoo")
             continue
         before = sum(total.values())
+        rows = []
         for tf in TIMEFRAMES:
             df = frames.get(tf)
             if df is None or getattr(df, "empty", True):
@@ -55,7 +90,8 @@ def main() -> None:
                 if m["status"] not in total or not m.get("is_high_rr"):
                     continue
                 total[m["status"]] += 1
-                upsert_signal(sb, signal_to_row(m), dry_run=a.dry_run)
+                rows.append(signal_to_row(m))
+        sb = _write_symbol(sb, t, rows, a.dry_run)
         print(f"  {t}: {sum(total.values()) - before} marker(s)")
     print(f"Backfill {'DRY-RUN' if a.dry_run else 'LIVE'}: {total}")
     print(f"Symbols: {len(syms)}, without data: {len(missing)}")
