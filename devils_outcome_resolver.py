@@ -163,6 +163,7 @@ def load_open(supabase: Client, limit: int = 2000) -> list[dict]:
         )
         .eq("is_active", True)
         .is_("result", "null")
+        .neq("strategy", "devils_cisd_v1")  # paper rule resolves itself (50-bar time exit)
         .limit(limit)
         .execute()
     )

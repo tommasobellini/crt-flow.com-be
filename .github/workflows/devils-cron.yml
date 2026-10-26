@@ -38,3 +38,4 @@ jobs:
         run: |
           python devils_scanner.py --workers 10 --universe sp500_nasdaq
           python devils_outcome_resolver.py
+          python devils_cisd_v1_paper.py  # PAPER ONLY, no orders

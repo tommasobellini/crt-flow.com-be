@@ -11,6 +11,7 @@ on the new unique key (strategy, symbol, timeframe, direction, pattern_at).
 from __future__ import annotations
 
 import argparse
+import time
 
 from devils_scanner import TIMEFRAMES, fetch_devils_frames, signal_to_row, upsert_signal
 from devils_outcome_resolver import setup_logging, setup_supabase
@@ -33,8 +34,19 @@ def main() -> None:
         rows = sb.table("devils_signals").select("symbol").limit(5000).execute().data or []
         syms = sorted({r["symbol"] for r in rows})
     total = {"ACTIVE": 0, "CLOSED_WIN": 0, "CLOSED_LOSS": 0}
+    missing: list[str] = []
     for t in syms:
-        frames = fetch_devils_frames(t)
+        frames = {}
+        for attempt in range(3):  # Yahoo throttles long runs: retry before giving up
+            frames = fetch_devils_frames(t) or {}
+            if any(df is not None and not getattr(df, "empty", True) for df in frames.values()):
+                break
+            time.sleep(5 * (attempt + 1))
+        else:
+            missing.append(t)
+            print(f"  ! {t}: no data from Yahoo")
+            continue
+        before = sum(total.values())
         for tf in TIMEFRAMES:
             df = frames.get(tf)
             if df is None or getattr(df, "empty", True):
@@ -44,7 +56,11 @@ def main() -> None:
                     continue
                 total[m["status"]] += 1
                 upsert_signal(sb, signal_to_row(m), dry_run=a.dry_run)
+        print(f"  {t}: {sum(total.values()) - before} marker(s)")
     print(f"Backfill {'DRY-RUN' if a.dry_run else 'LIVE'}: {total}")
+    print(f"Symbols: {len(syms)}, without data: {len(missing)}")
+    if missing:
+        print("Rerun only these with: --symbols " + ",".join(missing))
 
 
 if __name__ == "__main__":
