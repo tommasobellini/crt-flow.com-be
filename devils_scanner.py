@@ -21,7 +21,7 @@ from market_data import (
     resample_to_weekly,
 )
 from strategy.config import YF_PERIOD_1H
-from strategy.devils_markers import TfLabel, detect_active_devils_marker
+from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
 
 # 7H removed: not a session-aligned timeframe (no TradingView equivalent).
 TIMEFRAMES: list[TfLabel] = ["4H", "1D", "1W", "1M"]
@@ -163,8 +163,12 @@ def signal_to_row(signal: dict) -> dict:
         "stop_loss": signal["stop_loss"],
         "target": signal["target"],
         "rr_ratio": signal.get("rr_ratio"),
-        "result": None,
-        "exit_reason": None,
+        "result": {"CLOSED_WIN": "WIN", "CLOSED_LOSS": "LOSS"}.get(signal["status"]),
+        "exit_reason": {"CLOSED_WIN": "TP_HIT", "CLOSED_LOSS": "SL_HIT"}.get(signal["status"]),
+        "r_multiple": (
+            signal.get("rr_ratio") if signal["status"] == "CLOSED_WIN"
+            else -1.0 if signal["status"] == "CLOSED_LOSS" else None
+        ),
         "closed_at": None,
         "is_active": signal["status"] == "ACTIVE",
         "pattern_at": signal.get("pattern_at"),
@@ -220,6 +224,10 @@ def scan_ticker(
         df = frames.get(tf)
         if df is None or getattr(df, "empty", True):
             continue
+        if persist:
+            # Trades that already closed between scans are real outcomes: record them.
+            for closed in closed_devils_markers(df, ticker=ticker, timeframe=tf):
+                upsert_signal(supabase, signal_to_row(closed), dry_run=dry_run)
         sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf)
         if sig is None:
             continue

@@ -114,7 +114,8 @@ def test_invalidated_when_price_crosses_mark():
     )
     bear = [m for m in all_m if m["direction"] == "BEARISH"]
     assert bear
-    assert bear[0]["status"] == "INVALIDATED"
+    # crossing the mark = stop hit (stop == mark level) -> recorded as a loss
+    assert bear[0]["status"] == "CLOSED_LOSS"
 
 
 def test_ignores_old_outside_last_3():
@@ -152,3 +153,20 @@ def test_resample_helpers():
         index=daily_idx,
     )
     assert len(resample_to_monthly(daily)) >= 12
+
+
+def test_marker_already_won_is_not_reported_as_active():
+    """Survivorship-bias guard: a marker whose TP was already hit must not be persisted."""
+    rows = _base_rows(25, mid=110.0)
+    rows[18]["Low"] = 104.0
+    rows[18]["High"] = 106.0
+    rows[17]["Low"] = 105.0
+    rows[19]["Low"] = 105.0
+    i = 23
+    rows[i].update({"Open": 110.0, "High": 110.0, "Low": 107.5, "Close": 108.0})
+    # next bar reaches the target (swing low 104) without touching the stop
+    rows[24].update({"Open": 107.0, "High": 107.5, "Low": 103.5, "Close": 104.0})
+    df = _make_df(rows)
+    assert detect_active_devils_marker(df, ticker="TEST", timeframe="1D") is None
+    markers = find_devils_markers(df, ticker="TEST", timeframe="1D")
+    assert any(m["trade_outcome"] == "CLOSED_WIN" for m in markers)

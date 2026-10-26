@@ -143,6 +143,24 @@ def _status_after_marker(df: pd.DataFrame, mark_i: int, level: float) -> Status:
     return "ACTIVE"
 
 
+def trade_outcome_after_marker(
+    df: pd.DataFrame, mark_i: int, direction: Direction, stop: float, target: float
+) -> Literal["OPEN", "CLOSED_WIN", "CLOSED_LOSS"]:
+    """Trade outcome on bars after the mark. Same bar SL+TP -> LOSS (conservative)."""
+    for _, row in df.iloc[mark_i + 1 :].iterrows():
+        high = _to_f(row["High"])
+        low = _to_f(row["Low"])
+        if direction == "BULLISH":
+            sl_hit, tp_hit = low <= stop, high >= target
+        else:
+            sl_hit, tp_hit = high >= stop, low <= target
+        if sl_hit:
+            return "CLOSED_LOSS"
+        if tp_hit:
+            return "CLOSED_WIN"
+    return "OPEN"
+
+
 def _build_signal(
     *,
     ticker: str,
@@ -175,6 +193,7 @@ def _build_signal(
         "is_cisd_broken": True,
         "cisd_label": "ENTRY",
         "meta_rule": "open_eq_high" if direction == "BEARISH" else "open_eq_low",
+        "trade_outcome": trade_outcome_after_marker(df, mark_i, direction, stop, target),
     }
 
 
@@ -222,8 +241,13 @@ def find_devils_markers(
             if rr is None:
                 continue
             status = _status_after_marker(df, i, level)
-            if status == "INVALIDATED" and not include_invalidated:
+            outcome = trade_outcome_after_marker(df, i, "BEARISH", stop, target)
+            # A crossed mark whose trade closed is a real outcome (stop = mark level):
+            # keep it, so losses are counted instead of silently dropped.
+            if status == "INVALIDATED" and outcome == "OPEN" and not include_invalidated:
                 continue
+            if outcome != "OPEN":
+                status = outcome
             signals.append(
                 _build_signal(
                     ticker=ticker,
@@ -254,8 +278,13 @@ def find_devils_markers(
             if rr is None:
                 continue
             status = _status_after_marker(df, i, level)
-            if status == "INVALIDATED" and not include_invalidated:
+            outcome = trade_outcome_after_marker(df, i, "BULLISH", stop, target)
+            # A crossed mark whose trade closed is a real outcome (stop = mark level):
+            # keep it, so losses are counted instead of silently dropped.
+            if status == "INVALIDATED" and outcome == "OPEN" and not include_invalidated:
                 continue
+            if outcome != "OPEN":
+                status = outcome
             signals.append(
                 _build_signal(
                     ticker=ticker,
@@ -275,6 +304,17 @@ def find_devils_markers(
     return signals
 
 
+def closed_devils_markers(
+    df: pd.DataFrame, *, ticker: str, timeframe: TfLabel, recent_candles: int = RECENT_CANDLES
+) -> list[dict]:
+    """Markers in the recent window whose trade already hit TP or SL (to persist as outcomes)."""
+    return [
+        m
+        for m in find_devils_markers(df, ticker=ticker, timeframe=timeframe, recent_candles=recent_candles)
+        if m["status"] in ("CLOSED_WIN", "CLOSED_LOSS")
+    ]
+
+
 def detect_active_devils_marker(
     df: pd.DataFrame,
     *,
@@ -290,7 +330,14 @@ def detect_active_devils_marker(
         recent_candles=recent_candles,
         include_invalidated=False,
     )
-    active = [m for m in markers if m["status"] == "ACTIVE"]
+    # Only markers whose trade is still open: a marker that already hit TP or SL
+    # between the mark bar and now must not be persisted, otherwise past winners
+    # get stored (then resolved WIN) while past losers are dropped -> survivorship bias.
+    active = [
+        m
+        for m in markers
+        if m["status"] == "ACTIVE"
+    ]
     if not active:
         return None
     high_rr = [m for m in active if m.get("is_high_rr")]
