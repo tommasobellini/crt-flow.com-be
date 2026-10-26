@@ -40,7 +40,7 @@ def main() -> None:
             if df is None or getattr(df, "empty", True):
                 continue
             for m in find_devils_markers(df, ticker=t, timeframe=tf, recent_candles=len(df)):
-                if m["status"] not in total:
+                if m["status"] not in total or not m.get("is_high_rr"):
                     continue
                 total[m["status"]] += 1
                 upsert_signal(sb, signal_to_row(m), dry_run=a.dry_run)

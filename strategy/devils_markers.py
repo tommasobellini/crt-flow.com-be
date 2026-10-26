@@ -311,7 +311,7 @@ def closed_devils_markers(
     return [
         m
         for m in find_devils_markers(df, ticker=ticker, timeframe=timeframe, recent_candles=recent_candles)
-        if m["status"] in ("CLOSED_WIN", "CLOSED_LOSS")
+        if m["status"] in ("CLOSED_WIN", "CLOSED_LOSS") and m.get("is_high_rr")
     ]
 
 
