@@ -34,7 +34,8 @@ def _write_symbol(sb, symbol, rows, dry_run):
             )
             done = {tuple(str(r[k]) for k in KEY) for r in closed
                     if r.get("result") in ("WIN", "LOSS") or r.get("status") in ("CLOSED_WIN", "CLOSED_LOSS")}
-            todo = [r for r in rows if tuple(str(r[k]) for k in KEY) not in done]
+            todo = list({tuple(str(r[k]) for k in KEY): r for r in rows
+                         if tuple(str(r[k]) for k in KEY) not in done}.values())  # no dup keys in one upsert
             for i in range(0, len(todo), 500):
                 sb.table("devils_signals").upsert(
                     todo[i:i + 500], on_conflict="strategy,symbol,timeframe,direction,pattern_at"

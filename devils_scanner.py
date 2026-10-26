@@ -233,6 +233,8 @@ def scan_ticker(
             for closed in closed_devils_markers(df, ticker=ticker, timeframe=tf):
                 upsert_signal(supabase, signal_to_row(closed), dry_run=dry_run)
         sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf)
+        if sig and not sig.get("is_high_rr"):  # same RR >= 1.5 filter as closed markers
+            sig = None
         if sig is None:
             continue
         results.append(sig)
