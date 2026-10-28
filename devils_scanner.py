@@ -265,19 +265,47 @@ def parse_args():
 
 
 def backfill_new_watchlist_symbols() -> None:
-    """Full history for TradingView tickers that have no Devils rows yet (added since last run)."""
+    """Full history once for TradingView tickers never backfilled. A ticker with no Yahoo data
+    is retried at most 3 times, then paused 7 days."""
     try:
-        sb = setup_supabase()
-        wl = {r["symbol"] for r in (sb.table("devils_watchlist").select("symbol").execute().data or [])}
-        new = []
-        for s in sorted(wl):
-            if not (sb.table("devils_signals").select("id").eq("symbol", s).limit(1).execute().data):
-                new.append(s)
-        if new:
-            from devils_backfill import backfill_symbols
+        from datetime import timedelta
 
-            print(f"Backfill for new watchlist tickers: {new}")
-            backfill_symbols(sb, new)
+        sb = setup_supabase()
+        now = datetime.now(timezone.utc)
+        rows = (sb.table("devils_watchlist").select("symbol,backfill_attempts,last_backfill_attempt_at")
+                .is_("backfilled_at", "null").execute().data or [])
+        todo = []
+        for r in rows:
+            last = r.get("last_backfill_attempt_at")
+            paused = (r.get("backfill_attempts") or 0) >= 3 and last and \
+                datetime.fromisoformat(last.replace("Z", "+00:00")) > now - timedelta(days=7)
+            if not paused:
+                todo.append(r)
+        if todo:  # tickers that already have history (e.g. S&P 500) only need the flag
+            have = {r["symbol"] for r in (sb.table("devils_signals").select("symbol")
+                    .in_("symbol", [r["symbol"] for r in todo]).eq("strategy", "pure_no_wick")
+                    .limit(100000).execute().data or [])}
+            if have:
+                sb.table("devils_watchlist").update({"backfilled_at": now.isoformat()}).in_("symbol", sorted(have)).execute()
+            todo = [r for r in todo if r["symbol"] not in have]
+        if not todo:
+            return
+        from devils_backfill import backfill_symbols
+
+        syms = sorted(r["symbol"] for r in todo)
+        print(f"Backfill for new watchlist tickers: {syms}")
+        _, missing = backfill_symbols(sb, syms)
+        sb = setup_supabase()
+        done = [s for s in syms if s not in missing]
+        if done:
+            sb.table("devils_watchlist").update({"backfilled_at": now.isoformat()}).in_("symbol", done).execute()
+        for r in todo:
+            if r["symbol"] in missing:
+                attempts = (r.get("backfill_attempts") or 0)
+                attempts = 1 if attempts >= 3 else attempts + 1  # new cycle after a 7-day pause
+                sb.table("devils_watchlist").update(
+                    {"backfill_attempts": attempts, "last_backfill_attempt_at": now.isoformat()}
+                ).eq("symbol", r["symbol"]).execute()
     except Exception as e:  # never block the live scan
         print(f"WARNING watchlist backfill skipped: {e}")
 

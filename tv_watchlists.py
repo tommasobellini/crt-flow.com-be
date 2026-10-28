@@ -7,7 +7,7 @@ import re
 import requests
 
 WATCHLIST_IDS = ["125514311", "153934167", "144009314", "141465549"]
-STOCK_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "NYSEARCA", "ARCA", "BATS", "CBOE"}
+STOCK_EXCHANGES = {"NASDAQ", "NYSE", "AMEX"}
 _SYMBOLS_RE = re.compile(r'"symbols":(\[[^\]]*\])')
 
 
