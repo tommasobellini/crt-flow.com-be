@@ -64,7 +64,7 @@ def main() -> None:
     elif a.symbols:
         syms = a.symbols.split(",")
     else:
-        syms = get_universe()  # same S&P 500 + NASDAQ 100 universe as the live scanner
+        syms = get_universe(None if a.dry_run else sb)  # same universe as the live scanner (+ TradingView)
     if a.start_from:
         syms = syms[syms.index(a.start_from.upper()):]
     total = {"ACTIVE": 0, "CLOSED_WIN": 0, "CLOSED_LOSS": 0}

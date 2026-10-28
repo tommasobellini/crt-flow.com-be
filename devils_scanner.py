@@ -21,6 +21,7 @@ from market_data import (
     resample_to_weekly,
 )
 from strategy.config import YF_PERIOD_1H
+from tv_watchlists import load_watchlist
 from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
 
 # 7H removed: not a session-aligned timeframe (no TradingView equivalent).
@@ -102,11 +103,16 @@ def get_nasdaq100_tickers() -> list[str]:
     ]
 
 
-def get_universe() -> list[str]:
+def get_universe(supabase=None) -> list[str]:
     sp = get_sp500_tickers()
     nd = get_nasdaq100_tickers()
-    print(f"S&P 500: {len(sp)} | NASDAQ 100: {len(nd)}")
-    return sorted(set(sp + nd))
+    try:
+        wl = load_watchlist(supabase)
+    except Exception as e:  # watchlist must never break the scan
+        print(f"WARNING watchlist skipped: {e}")
+        wl = []
+    print(f"S&P 500: {len(sp)} | NASDAQ 100: {len(nd)} | TradingView: {len(wl)}")
+    return sorted(set(sp + nd + wl))
 
 
 def _history(stock: yf.Ticker, *, period: str, interval: str):
@@ -267,7 +273,8 @@ def main():
 
         tickers = list(TARGET_WATCHLIST)
     else:
-        tickers = get_universe()
+        # also syncs devils_watchlist (favourites filter in the web app) when persisting
+        tickers = get_universe(setup_supabase() if not args.no_persist and not args.dry_run else None)
 
     persist = not args.no_persist
     dry_run = args.dry_run
