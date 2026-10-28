@@ -43,10 +43,10 @@ def watchlist_ids(supabase=None) -> list[str]:
     """Lists configured in the web app settings (devils_watchlist_sources); default 4 if none."""
     if supabase is not None:
         try:
-            rows = supabase.table("devils_watchlist_sources").select("url").eq("enabled", True).execute().data or []
-            ids = [m.group(1) for r in rows if (m := re.search(r"watchlists/(\d+)", r.get("url") or ""))]
-            if ids:
-                return ids
+            rows = supabase.table("devils_watchlist_sources").select("url,enabled").execute().data or []
+            if rows:  # table configured: respect it, even if every list is disabled
+                return [m.group(1) for r in rows if r.get("enabled")
+                        and (m := re.search(r"watchlists/(\d+)", r.get("url") or ""))]
         except Exception as e:
             print(f"WARNING watchlist sources not read ({e}); using defaults")
     return list(WATCHLIST_IDS)
@@ -72,7 +72,9 @@ def load_watchlist(supabase=None) -> list[str]:
             return sorted(by_symbol)
         rows = supabase.table("devils_watchlist").select("symbol").execute().data or []
         return sorted({r["symbol"] for r in rows} | set(by_symbol))
-    if supabase is not None:
+    if supabase is not None and not by_symbol:  # all lists disabled
+        supabase.table("devils_watchlist").delete().neq("symbol", "").execute()
+    elif supabase is not None:
         supabase.table("devils_watchlist").upsert(
             [{"symbol": s, "list_ids": ids} for s, ids in by_symbol.items()], on_conflict="symbol"
         ).execute()

@@ -282,9 +282,9 @@ def backfill_new_watchlist_symbols() -> None:
             if not paused:
                 todo.append(r)
         if todo:  # tickers that already have history (e.g. S&P 500) only need the flag
-            have = {r["symbol"] for r in (sb.table("devils_signals").select("symbol")
-                    .in_("symbol", [r["symbol"] for r in todo]).eq("strategy", "pure_no_wick")
-                    .limit(100000).execute().data or [])}
+            have = {r["symbol"] for r in todo  # limit(1) per ticker: PostgREST caps rows at 1000
+                    if sb.table("devils_signals").select("id").eq("symbol", r["symbol"])
+                    .eq("strategy", "pure_no_wick").limit(1).execute().data}
             if have:
                 sb.table("devils_watchlist").update({"backfilled_at": now.isoformat()}).in_("symbol", sorted(have)).execute()
             todo = [r for r in todo if r["symbol"] not in have]
