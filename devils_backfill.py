@@ -50,23 +50,7 @@ def _write_symbol(sb, symbol, rows, dry_run):
     return sb
 
 
-def main() -> None:
-    setup_logging()
-    p = argparse.ArgumentParser()
-    p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--symbol", default=None)
-    p.add_argument("--symbols", default=None, help="comma-separated list (default: scanner universe S&P 500 + NASDAQ 100)")
-    p.add_argument("--start-from", default=None, help="skip symbols before this one (resume)")
-    a = p.parse_args()
-    sb = setup_supabase()
-    if a.symbol:
-        syms = [a.symbol]
-    elif a.symbols:
-        syms = a.symbols.split(",")
-    else:
-        syms = get_universe(None if a.dry_run else sb)  # same universe as the live scanner (+ TradingView)
-    if a.start_from:
-        syms = syms[syms.index(a.start_from.upper()):]
+def backfill_symbols(sb, syms, dry_run=False):
     total = {"ACTIVE": 0, "CLOSED_WIN": 0, "CLOSED_LOSS": 0}
     missing: list[str] = []
     for t in syms:
@@ -92,8 +76,29 @@ def main() -> None:
                     continue
                 total[m["status"]] += 1
                 rows.append(signal_to_row(m))
-        sb = _write_symbol(sb, t, rows, a.dry_run)
+        sb = _write_symbol(sb, t, rows, dry_run)
         print(f"  {t}: {sum(total.values()) - before} marker(s)")
+    return total, missing
+
+
+def main() -> None:
+    setup_logging()
+    p = argparse.ArgumentParser()
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--symbol", default=None)
+    p.add_argument("--symbols", default=None, help="comma-separated list (default: scanner universe S&P 500 + NASDAQ 100)")
+    p.add_argument("--start-from", default=None, help="skip symbols before this one (resume)")
+    a = p.parse_args()
+    sb = setup_supabase()
+    if a.symbol:
+        syms = [a.symbol]
+    elif a.symbols:
+        syms = a.symbols.split(",")
+    else:
+        syms = get_universe(None if a.dry_run else sb)  # same universe as the live scanner (+ TradingView)
+    if a.start_from:
+        syms = syms[syms.index(a.start_from.upper()):]
+    total, missing = backfill_symbols(sb, syms, a.dry_run)
     print(f"Backfill {'DRY-RUN' if a.dry_run else 'LIVE'}: {total}")
     print(f"Symbols: {len(syms)}, without data: {len(missing)}")
     if missing:

@@ -264,6 +264,24 @@ def parse_args():
     return p.parse_args()
 
 
+def backfill_new_watchlist_symbols() -> None:
+    """Full history for TradingView tickers that have no Devils rows yet (added since last run)."""
+    try:
+        sb = setup_supabase()
+        wl = {r["symbol"] for r in (sb.table("devils_watchlist").select("symbol").execute().data or [])}
+        new = []
+        for s in sorted(wl):
+            if not (sb.table("devils_signals").select("id").eq("symbol", s).limit(1).execute().data):
+                new.append(s)
+        if new:
+            from devils_backfill import backfill_symbols
+
+            print(f"Backfill for new watchlist tickers: {new}")
+            backfill_symbols(sb, new)
+    except Exception as e:  # never block the live scan
+        print(f"WARNING watchlist backfill skipped: {e}")
+
+
 def main():
     args = parse_args()
     if args.symbol:
@@ -275,6 +293,9 @@ def main():
     else:
         # also syncs devils_watchlist (favourites filter in the web app) when persisting
         tickers = get_universe(setup_supabase() if not args.no_persist and not args.dry_run else None)
+
+    if not args.symbol and args.universe != "watchlist" and not args.no_persist and not args.dry_run:
+        backfill_new_watchlist_symbols()
 
     persist = not args.no_persist
     dry_run = args.dry_run
