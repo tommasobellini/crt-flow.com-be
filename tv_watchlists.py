@@ -39,12 +39,25 @@ def fetch_watchlist(list_id: str, timeout: int = 20) -> list[str]:
     return parse_symbols(json.loads(m.group(1)))
 
 
+def watchlist_ids(supabase=None) -> list[str]:
+    """Lists configured in the web app settings (devils_watchlist_sources); default 4 if none."""
+    if supabase is not None:
+        try:
+            rows = supabase.table("devils_watchlist_sources").select("url").eq("enabled", True).execute().data or []
+            ids = [m.group(1) for r in rows if (m := re.search(r"watchlists/(\d+)", r.get("url") or ""))]
+            if ids:
+                return ids
+        except Exception as e:
+            print(f"WARNING watchlist sources not read ({e}); using defaults")
+    return list(WATCHLIST_IDS)
+
+
 def load_watchlist(supabase=None) -> list[str]:
     """Current favourites. If any list fails or returns 0 tickers, keep the last saved list
     from devils_watchlist (never silently shrink)."""
     by_symbol: dict[str, list[str]] = {}
     ok = True
-    for lid in WATCHLIST_IDS:
+    for lid in watchlist_ids(supabase):
         try:
             syms = fetch_watchlist(lid)
             if not syms:
