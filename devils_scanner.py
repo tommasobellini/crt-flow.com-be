@@ -38,10 +38,10 @@ def setup_supabase():
     key = (
         os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     )
     if not url or not key:
-        raise RuntimeError("Missing Supabase credentials in scanner/.env.local")
+        # anon key cannot read per-user watchlists (RLS): fail instead of silently using defaults
+        raise RuntimeError("Missing SUPABASE_SERVICE_ROLE_KEY in scanner/.env.local")
     return create_client(url, key)
 
 
