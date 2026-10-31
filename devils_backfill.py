@@ -13,12 +13,23 @@ from __future__ import annotations
 import argparse
 import time
 
+import pandas as pd
+
 from devils_scanner import TIMEFRAMES, fetch_devils_frames, get_universe, signal_to_row
 from devils_outcome_resolver import setup_logging, setup_supabase
+from signal_context import keep_existing_context
 from strategy.devils_markers import find_devils_markers
 
 
 KEY = ("timeframe", "direction", "pattern_at")
+
+
+def row_key(r):
+    """(timeframe, direction, pattern_at as UTC Timestamp): DB returns '...05:00:00+00:00',
+    Yahoo frames give '...00:00:00-05:00'; string comparison would miss the match."""
+    ts = pd.Timestamp(r["pattern_at"])
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    return (str(r["timeframe"]), str(r["direction"]), ts)
 
 
 def _write_symbol(sb, symbol, rows, dry_run):
@@ -29,13 +40,16 @@ def _write_symbol(sb, symbol, rows, dry_run):
     for attempt in range(4):
         try:
             closed = (
-                sb.table("devils_signals").select("timeframe,direction,pattern_at,result,status")
+                sb.table("devils_signals").select("timeframe,direction,pattern_at,result,status,meta")
                 .eq("strategy", "pure_no_wick").eq("symbol", symbol).execute().data or []
             )
-            done = {tuple(str(r[k]) for k in KEY) for r in closed
+            done = {row_key(r) for r in closed
                     if r.get("result") in ("WIN", "LOSS") or r.get("status") in ("CLOSED_WIN", "CLOSED_LOSS")}
-            todo = list({tuple(str(r[k]) for k in KEY): r for r in rows
-                         if tuple(str(r[k]) for k in KEY) not in done}.values())  # no dup keys in one upsert
+            old_meta = {row_key(r): r.get("meta") for r in closed}
+            rows = [{**r, "meta": keep_existing_context(r.get("meta"), old_meta.get(row_key(r)))}
+                    for r in rows]  # keep the original ctx snapshot of rows already stored
+            todo = list({row_key(r): r for r in rows
+                         if row_key(r) not in done}.values())  # no dup keys in one upsert
             for i in range(0, len(todo), 500):
                 sb.table("devils_signals").upsert(
                     todo[i:i + 500], on_conflict="strategy,symbol,timeframe,direction,pattern_at"
@@ -75,7 +89,7 @@ def backfill_symbols(sb, syms, dry_run=False):
                 if m["status"] not in total or not m.get("is_high_rr"):
                     continue
                 total[m["status"]] += 1
-                rows.append(signal_to_row(m))
+                rows.append(signal_to_row(m, frames))  # + meta.ctx, same code as live
         sb = _write_symbol(sb, t, rows, dry_run)
         print(f"  {t}: {sum(total.values()) - before} marker(s)")
     return total, missing

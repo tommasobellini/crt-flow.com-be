@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from market_data import (
     resample_to_weekly,
 )
 from strategy.config import YF_PERIOD_1H
+from signal_context import attach_context, compute_signal_context, keep_existing_context
 from tv_watchlists import load_watchlist
 from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
 
@@ -156,8 +158,9 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
     return frames
 
 
-def signal_to_row(signal: dict) -> dict:
-    return {
+def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
+    """frames: the scan frames; when given, meta gets the context snapshot (meta.ctx)."""
+    row = {
         "symbol": signal["ticker"],
         "timeframe": signal["timeframe"],
         "direction": signal["direction"],
@@ -187,6 +190,9 @@ def signal_to_row(signal: dict) -> dict:
             "strategy": "pure_no_wick",
         },
     }
+    if frames is not None:
+        row["meta"] = attach_context(row["meta"], compute_signal_context(signal, frames))
+    return row
 
 
 def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
@@ -196,11 +202,13 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
             f"{row['direction']} RR={row.get('rr_ratio')} "
             f"SL={row['stop_loss']} TP={row['target']}"
         )
+        if row.get("meta", {}).get("ctx") is not None:
+            print(f"    ctx={json.dumps(row['meta']['ctx'], sort_keys=True)}")
         return
     # Do not overwrite already closed outcomes
     existing = (
         supabase.table("devils_signals")
-        .select("id, result, status")
+        .select("id, result, status, meta")
         .eq("symbol", row["symbol"])
         .eq("timeframe", row["timeframe"])
         .eq("direction", row["direction"])
@@ -215,6 +223,8 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
             "CLOSED_LOSS",
         ):
             return
+        # keep the first context snapshot of a re-upserted active signal (sector/earnings must not drift)
+        row["meta"] = keep_existing_context(row.get("meta"), prev.get("meta"))
     supabase.table("devils_signals").upsert(
         row, on_conflict="strategy,symbol,timeframe,direction,pattern_at"
     ).execute()
@@ -237,7 +247,7 @@ def scan_ticker(
         if persist:
             # Trades that already closed between scans are real outcomes: record them.
             for closed in closed_devils_markers(df, ticker=ticker, timeframe=tf):
-                upsert_signal(supabase, signal_to_row(closed), dry_run=dry_run)
+                upsert_signal(supabase, signal_to_row(closed, frames), dry_run=dry_run)
         sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf)
         if sig and not sig.get("is_high_rr"):  # same RR >= 1.5 filter as closed markers
             sig = None
@@ -245,7 +255,7 @@ def scan_ticker(
             continue
         results.append(sig)
         if persist:
-            upsert_signal(supabase, signal_to_row(sig), dry_run=dry_run)
+            upsert_signal(supabase, signal_to_row(sig, frames), dry_run=dry_run)
 
     return results
 
