@@ -13,6 +13,7 @@ import yfinance as yf
 
 from devils_outcome_resolver import setup_logging, setup_supabase
 from market_data import clean_df, drop_unclosed
+from strategy.sizing import attach_size_factor
 from strategy.devils_cisd_v1 import STRATEGY, find_signals
 
 UNIVERSE = (
@@ -44,7 +45,9 @@ def to_row(s: dict) -> dict:
         "r_multiple": s["r_multiple"], "closed_at": s["closed_at"], "is_active": not closed,
         "pattern_at": s["pattern_at"], "strategy": STRATEGY, "is_paper": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "meta": {"mark_at": s["mark_at"], "paper": True, "resolver_version": 2},
+        # size_factor is reporting only: the frozen devils_cisd_v1 rules are unchanged
+        "meta": attach_size_factor({"mark_at": s["mark_at"], "paper": True, "resolver_version": 2},
+                                   s["entry_price"], s["stop_loss"]),
     }
 
 

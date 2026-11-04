@@ -23,6 +23,7 @@ from market_data import (
 )
 from strategy.config import YF_PERIOD_1H
 from strategy.gap_fill import RESOLVER_VERSION
+from strategy.sizing import attach_size_factor
 from signal_context import attach_context, compute_signal_context, keep_existing_context
 from signal_outcome import attach_outcome, compute_trade_outcome
 from tv_watchlists import load_watchlist
@@ -196,6 +197,7 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
             "resolver_version": RESOLVER_VERSION,
         },
     }
+    row["meta"] = attach_size_factor(row["meta"], row.get("entry_price"), row.get("stop_loss"))
     if frames is not None:
         row["meta"] = attach_context(row["meta"], compute_signal_context(signal, frames))
         if signal["status"] in ("CLOSED_WIN", "CLOSED_LOSS"):  # post-close data: meta.outcome, never ctx

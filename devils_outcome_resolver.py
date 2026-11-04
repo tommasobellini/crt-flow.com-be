@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from strategy.gap_fill import RESOLVER_VERSION, exit_on_bar
+from strategy.sizing import attach_size_factor
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
@@ -141,6 +142,8 @@ def _close_payload(
         r_multiple = rr if result == "WIN" else -1.0
     meta = dict(signal.get("meta") or {})
     meta["resolver_version"] = RESOLVER_VERSION
+    meta = attach_size_factor(meta, signal.get("entry_price") or signal.get("cisd_level"),
+                              signal.get("stop_loss"))  # exposure cap (reporting only)
 
     return {
         "result": result,
