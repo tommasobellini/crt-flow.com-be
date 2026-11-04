@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from strategy.gap_fill import RESOLVER_VERSION, exit_on_bar
 import pandas as pd
 
 PIVOT_WINDOW = 3
@@ -143,22 +144,28 @@ def _status_after_marker(df: pd.DataFrame, mark_i: int, level: float) -> Status:
     return "ACTIVE"
 
 
+def resolve_trade_after_marker(
+    df: pd.DataFrame, mark_i: int, direction: Direction, stop: float, target: float,
+    entry: float | None = None, planned_r: float | None = None,
+) -> tuple[Literal["OPEN", "CLOSED_WIN", "CLOSED_LOSS"], float | None]:
+    """(status, r_multiple) on bars after the mark (resolver_version 2, see strategy.gap_fill).
+    Same bar SL+TP -> LOSS (conservative). A bar opening beyond stop/target fills at the open.
+    entry defaults to the mark bar close (the scanner entry)."""
+    if entry is None:
+        entry = round(_to_f(df.iloc[mark_i]["Close"]), 4)
+    for _, row in df.iloc[mark_i + 1 :].iterrows():
+        ex = exit_on_bar(row["Open"], row["High"], row["Low"], long=direction == "BULLISH",
+                         entry=entry, stop=stop, target=target, planned_r=planned_r)
+        if ex is not None:
+            return ex[0], ex[1]
+    return "OPEN", None
+
+
 def trade_outcome_after_marker(
     df: pd.DataFrame, mark_i: int, direction: Direction, stop: float, target: float
 ) -> Literal["OPEN", "CLOSED_WIN", "CLOSED_LOSS"]:
     """Trade outcome on bars after the mark. Same bar SL+TP -> LOSS (conservative)."""
-    for _, row in df.iloc[mark_i + 1 :].iterrows():
-        high = _to_f(row["High"])
-        low = _to_f(row["Low"])
-        if direction == "BULLISH":
-            sl_hit, tp_hit = low <= stop, high >= target
-        else:
-            sl_hit, tp_hit = high >= stop, low <= target
-        if sl_hit:
-            return "CLOSED_LOSS"
-        if tp_hit:
-            return "CLOSED_WIN"
-    return "OPEN"
+    return resolve_trade_after_marker(df, mark_i, direction, stop, target)[0]
 
 
 def _build_signal(
@@ -194,6 +201,9 @@ def _build_signal(
         "cisd_label": "ENTRY",
         "meta_rule": "open_eq_high" if direction == "BEARISH" else "open_eq_low",
         "trade_outcome": trade_outcome_after_marker(df, mark_i, direction, stop, target),
+        "r_multiple": resolve_trade_after_marker(df, mark_i, direction, stop, target,
+                                                 entry=entry, planned_r=rr)[1],
+        "resolver_version": RESOLVER_VERSION,
     }
 
 

@@ -22,6 +22,7 @@ from market_data import (
     resample_to_weekly,
 )
 from strategy.config import YF_PERIOD_1H
+from strategy.gap_fill import RESOLVER_VERSION
 from signal_context import attach_context, compute_signal_context, keep_existing_context
 from signal_outcome import attach_outcome, compute_trade_outcome
 from tv_watchlists import load_watchlist
@@ -177,7 +178,9 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
         "result": {"CLOSED_WIN": "WIN", "CLOSED_LOSS": "LOSS"}.get(signal["status"]),
         "exit_reason": {"CLOSED_WIN": "TP_HIT", "CLOSED_LOSS": "SL_HIT"}.get(signal["status"]),
         "r_multiple": (
-            signal.get("rr_ratio") if signal["status"] == "CLOSED_WIN"
+            signal["r_multiple"] if signal.get("r_multiple") is not None
+            and signal["status"] in ("CLOSED_WIN", "CLOSED_LOSS")
+            else signal.get("rr_ratio") if signal["status"] == "CLOSED_WIN"
             else -1.0 if signal["status"] == "CLOSED_LOSS" else None
         ),
         "closed_at": None,
@@ -190,6 +193,7 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
             "pattern_unix": signal.get("pattern_unix"),
             "is_high_rr": signal.get("is_high_rr"),
             "strategy": "pure_no_wick",
+            "resolver_version": RESOLVER_VERSION,
         },
     }
     if frames is not None:

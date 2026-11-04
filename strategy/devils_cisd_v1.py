@@ -14,6 +14,7 @@ PAPER ONLY: signals are tagged paper=True and must never be used for real orders
 from __future__ import annotations
 
 import numpy as np
+from strategy.gap_fill import exit_on_bar
 import pandas as pd
 
 STRATEGY = "devils_cisd_v1"
@@ -31,12 +32,19 @@ def add_trend(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _simulate(H, L, C, i0, dr, e, st):
-    """Returns (status, exit_index, r_multiple) with gross R (costs are not booked live)."""
+def _simulate(H, L, C, i0, dr, e, st, O=None):
+    """Returns (status, exit_index, r_multiple) with gross R (costs are not booked live).
+    With O (opens), a bar opening beyond stop/target fills at the open (resolver_version 2);
+    rules/entries are unchanged, only the measured R."""
     n = len(C)
     risk = (e - st) * dr
     tg = e + RR * risk * dr
     for k in range(i0 + 1, min(i0 + MAXH + 1, n)):
+        if O is not None:
+            ex = exit_on_bar(O[k], H[k], L[k], long=dr == 1, entry=e, stop=st, target=tg, planned_r=RR)
+            if ex is not None:
+                return ex[0], k, ex[1]
+            continue
         if (dr == 1 and L[k] <= st) or (dr == -1 and H[k] >= st):
             return "CLOSED_LOSS", k, -1.0
         if (dr == 1 and H[k] >= tg) or (dr == -1 and L[k] <= tg):
@@ -105,7 +113,7 @@ def find_signals(df: pd.DataFrame, ticker: str) -> list[dict]:
         risk = (e - st) * dr
         if risk <= 0 or risk / e < MIN_RISK_PCT:
             continue
-        status, k_exit, r = _simulate(H, L, C, ent, dr, e, st)
+        status, k_exit, r = _simulate(H, L, C, ent, dr, e, st, O)
         busy = k_exit if k_exit is not None else n
         out.append(
             {

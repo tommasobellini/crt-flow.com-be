@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
+from strategy.gap_fill import RESOLVER_VERSION, exit_on_bar
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
@@ -111,28 +112,23 @@ def resolve_outcome(signal: dict[str, Any], df: pd.DataFrame) -> dict[str, Any] 
     if future.empty:
         return None
 
+    rr = signal.get("rr_ratio")
     for ts, candle in future.iterrows():
-        high = float(candle["High"])
-        low = float(candle["Low"])
-        if is_long:
-            sl_hit = low <= stop
-            tp_hit = high >= target
-        else:
-            sl_hit = high >= stop
-            tp_hit = low <= target
-
-        # Same bar: SL first (conservative)
-        if sl_hit and tp_hit:
-            return _close_payload("LOSS", "SL_HIT", ts, signal)
-        if sl_hit:
-            return _close_payload("LOSS", "SL_HIT", ts, signal)
-        if tp_hit:
-            return _close_payload("WIN", "TP_HIT", ts, signal)
+        # Same bar SL+TP -> LOSS; a bar opening beyond stop/target fills at the open (v2)
+        ex = exit_on_bar(candle["Open"], candle["High"], candle["Low"], long=is_long,
+                         entry=entry, stop=stop, target=target,
+                         planned_r=float(rr) if rr else None)
+        if ex is None:
+            continue
+        status, r, _fill, _gap = ex
+        if status == "CLOSED_LOSS":
+            return _close_payload("LOSS", "SL_HIT", ts, signal, r)
+        return _close_payload("WIN", "TP_HIT", ts, signal, r)
     return None
 
 
 def _close_payload(
-    result: str, exit_reason: str, ts: pd.Timestamp, signal: dict
+    result: str, exit_reason: str, ts: pd.Timestamp, signal: dict, r_multiple: float | None = None
 ) -> dict[str, Any]:
     closed = ts.to_pydatetime()
     if closed.tzinfo is None:
@@ -140,8 +136,11 @@ def _close_payload(
     else:
         closed = closed.astimezone(timezone.utc)
 
-    rr = float(signal.get("rr_ratio") or 0)
-    r_multiple = rr if result == "WIN" else -1.0
+    if r_multiple is None:
+        rr = float(signal.get("rr_ratio") or 0)
+        r_multiple = rr if result == "WIN" else -1.0
+    meta = dict(signal.get("meta") or {})
+    meta["resolver_version"] = RESOLVER_VERSION
 
     return {
         "result": result,
@@ -150,6 +149,7 @@ def _close_payload(
         "is_active": False,
         "status": "CLOSED_WIN" if result == "WIN" else "CLOSED_LOSS",
         "r_multiple": r_multiple,
+        "meta": meta,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -159,7 +159,7 @@ def load_open(supabase: Client, limit: int = 2000) -> list[dict]:
         supabase.table("devils_signals")
         .select(
             "id, symbol, timeframe, direction, entry_price, cisd_level, "
-            "stop_loss, target, rr_ratio, pattern_at, created_at, result, status"
+            "stop_loss, target, rr_ratio, pattern_at, created_at, result, status, meta"
         )
         .eq("is_active", True)
         .is_("result", "null")

@@ -44,7 +44,7 @@ def to_row(s: dict) -> dict:
         "r_multiple": s["r_multiple"], "closed_at": s["closed_at"], "is_active": not closed,
         "pattern_at": s["pattern_at"], "strategy": STRATEGY, "is_paper": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "meta": {"mark_at": s["mark_at"], "paper": True},
+        "meta": {"mark_at": s["mark_at"], "paper": True, "resolver_version": 2},
     }
 
 
