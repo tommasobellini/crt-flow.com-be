@@ -23,6 +23,7 @@ from market_data import (
 )
 from strategy.config import YF_PERIOD_1H
 from signal_context import attach_context, compute_signal_context, keep_existing_context
+from signal_outcome import attach_outcome, compute_trade_outcome
 from tv_watchlists import load_watchlist
 from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
 
@@ -159,7 +160,8 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
 
 
 def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
-    """frames: the scan frames; when given, meta gets the context snapshot (meta.ctx)."""
+    """frames: the scan frames; when given, meta gets the context snapshot (meta.ctx) and,
+    for closed trades, meta.outcome (mae_r/mfe_r, not a filter)."""
     row = {
         "symbol": signal["ticker"],
         "timeframe": signal["timeframe"],
@@ -192,6 +194,8 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
     }
     if frames is not None:
         row["meta"] = attach_context(row["meta"], compute_signal_context(signal, frames))
+        if signal["status"] in ("CLOSED_WIN", "CLOSED_LOSS"):  # post-close data: meta.outcome, never ctx
+            row["meta"] = attach_outcome(row["meta"], compute_trade_outcome(signal, frames))
     return row
 
 
