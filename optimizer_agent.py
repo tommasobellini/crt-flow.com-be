@@ -14,6 +14,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 import yfinance as yf
+import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -41,7 +43,10 @@ BACKTEST_PERIOD        = "5y"  # daily history for backtester
 MIN_CONSENSUS_TICKERS  = 3     # abort recommendation if fewer tickers produce grid results
 OPENCODE_CMD           = "opencode"  # or full path if not on PATH
 IMPROVEMENT_THRESHOLD  = 0.05  # consensus params must beat baseline by ≥5% expectancy
-REPO_ROOT              = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VALIDATION_FRACTION    = 0.2
+VALIDATION_MIN_TRADES  = 30
+ROUND_TRIP_COST        = 0.001  # same 0.05% per-side assumption as the Devils UI
+REPO_ROOT              = os.path.dirname(os.path.abspath(__file__))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -168,6 +173,36 @@ def print_analysis(analysis: dict):
 DEFAULT_GRID_PARAMS = ["wall_wick_pct", "fuel_wick_pct", "displacement_mult"]
 
 
+def training_history(daily_df, hourly_df):
+    """Reserve the final 20% of daily bars before any parameter search or trade resolution."""
+    split = int(len(daily_df) * (1 - VALIDATION_FRACTION))
+    cutoff = pd.Timestamp(daily_df.index[split])
+    hourly_index = pd.to_datetime(hourly_df.index, utc=True)
+    cutoff_utc = cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+    return cutoff, daily_df.iloc[:split], hourly_df.loc[hourly_index < cutoff_utc]
+
+
+def validation_expectancy(trades, cutoff):
+    """Net R of held-out entries only; open trades and malformed results cannot approve a run."""
+    boundary = pd.Timestamp(cutoff).date()
+    held_out = [t for t in trades if pd.Timestamp(t["day"]).date() >= boundary]
+    closed = [t for t in held_out if t["result"] in ("WIN", "LOSS")]
+    if len(closed) < VALIDATION_MIN_TRADES or len(closed) != len(held_out):
+        return None
+    values = []
+    for t in closed:
+        entry, stop = float(t["entry"]), float(t["stop"])
+        risk = abs(entry - stop)
+        if not math.isfinite(entry) or not math.isfinite(risk) or entry <= 0 or risk <= 0:
+            return None
+        gross = float(t["rr"]) if t["result"] == "WIN" else -1.0
+        value = gross - ROUND_TRIP_COST * entry / risk
+        if not math.isfinite(value):
+            return None
+        values.append(value)
+    return sum(values) / len(values)
+
+
 def run_grid_search_on_tickers(
     tickers: list, full_grid: bool = False
 ) -> tuple[dict | None, dict]:
@@ -195,7 +230,11 @@ def run_grid_search_on_tickers(
                 continue
 
             data_cache[ticker] = (daily_df, hourly_df)
-            best = grid_search(ticker, daily_df, hourly_df, param_keys=param_keys)
+            _, train_daily, train_hourly = training_history(daily_df, hourly_df)
+            if len(train_daily) < 30 or len(train_hourly) < 100:
+                print(f"  Insufficient training history for {ticker}, skipping.")
+                continue
+            best = grid_search(ticker, train_daily, train_hourly, param_keys=param_keys)
             if best:
                 all_best.append(best)
         except Exception as e:
@@ -234,12 +273,10 @@ def run_grid_search_on_tickers(
 
 def validate_improvement(consensus: dict, data_cache: dict) -> tuple[bool, float, float]:
     """
-    Runs simulate() with default params AND consensus params on every cached ticker.
+    Compare paired baseline/candidate results on the held-out chronological window.
     Returns (should_proceed, avg_baseline_expectancy, avg_consensus_expectancy).
     Aborts if improvement < IMPROVEMENT_THRESHOLD.
     """
-    from backtester import simulate, compute_stats, ScannerParams, MIN_TRADES
-
     baseline_exps  = []
     consensus_exps = []
     defaults       = ScannerParams()
@@ -248,21 +285,20 @@ def validate_improvement(consensus: dict, data_cache: dict) -> tuple[bool, float
     print(f"\n[*] Validating consensus params vs baseline on {len(data_cache)} ticker(s)...")
 
     for ticker, (daily_df, hourly_df) in data_cache.items():
-        # Baseline
+        if len(daily_df) < 30 or len(hourly_df) < 100:
+            continue
+        cutoff, _, _ = training_history(daily_df, hourly_df)
         b_trades = simulate(ticker, daily_df, hourly_df, defaults)
-        b_stats  = compute_stats(b_trades)
-        if b_stats and b_stats["total"] >= MIN_TRADES:
-            baseline_exps.append(b_stats["expectancy"])
-
-        # Consensus
         c_trades = simulate(ticker, daily_df, hourly_df, consensus_p)
-        c_stats  = compute_stats(c_trades)
-        if c_stats and c_stats["total"] >= MIN_TRADES:
-            consensus_exps.append(c_stats["expectancy"])
+        b_exp = validation_expectancy(b_trades, cutoff)
+        c_exp = validation_expectancy(c_trades, cutoff)
+        if b_exp is not None and c_exp is not None:
+            baseline_exps.append(b_exp)
+            consensus_exps.append(c_exp)
 
-    if not baseline_exps or not consensus_exps:
-        print("[!] Not enough trades to compare — skipping improvement gate.")
-        return True, 0.0, 0.0
+    if len(baseline_exps) < MIN_CONSENSUS_TICKERS:
+        print("[!] Insufficient paired out-of-sample evidence — optimization blocked.")
+        return False, 0.0, 0.0
 
     avg_b = sum(baseline_exps) / len(baseline_exps)
     avg_c = sum(consensus_exps) / len(consensus_exps)
@@ -274,9 +310,9 @@ def validate_improvement(consensus: dict, data_cache: dict) -> tuple[bool, float
     print(f"  Consensus expectancy : {avg_c:+.4f} R/trade")
     print(f"  Relative improvement : {rel_improv*100:+.1f}%  (threshold: {IMPROVEMENT_THRESHOLD*100:.0f}%)")
 
-    if rel_improv < IMPROVEMENT_THRESHOLD:
+    if avg_c <= 0 or rel_improv < IMPROVEMENT_THRESHOLD:
         print(f"\n[!] Improvement below threshold — skipping OpenCode invocation.")
-        print(f"    The current scanner.py parameters are already near-optimal.")
+        print("    The candidate needs positive net expectancy and sufficient held-out improvement.")
         return False, avg_b, avg_c
 
     print(f"[+] Improvement validated — proceeding with OpenCode.")
@@ -293,17 +329,12 @@ def git_snapshot() -> bool:
     Returns True if a snapshot commit was created.
     """
     ts           = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    rel_path     = os.path.join("scanner", "scanner.py")
+    rel_path     = "scanner.py"
     commit_msg   = f"pre-optimizer snapshot [{ts}]"
 
     try:
-        # Stage only scanner.py
-        subprocess.run(
-            ["git", "add", rel_path],
-            cwd=REPO_ROOT, check=True, capture_output=True, text=True,
-        )
         result = subprocess.run(
-            ["git", "commit", "-m", commit_msg],
+            ["git", "commit", "--only", "-m", commit_msg, "--", rel_path],
             cwd=REPO_ROOT, capture_output=True, text=True,
         )
         if result.returncode == 0:
@@ -538,6 +569,12 @@ def main():
 
         # ── 3. Improvement gate ───────────────────────────────
         avg_b, avg_c = 0.0, 0.0
+        if not args.dry_run and not (best_params and data_cache):
+            run["status"] = "no_data"
+            run["gate_passed"] = False
+            run["error_message"] = "No candidate with held-out validation evidence"
+            print("[!] No validated candidate available — code changes blocked.")
+            return
         if best_params and data_cache and not args.dry_run:
             should_proceed, avg_b, avg_c = validate_improvement(best_params, data_cache)
             denom = abs(avg_b) if abs(avg_b) > 0.001 else 0.001

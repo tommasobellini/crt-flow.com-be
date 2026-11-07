@@ -46,8 +46,12 @@ def _write_symbol(sb, symbol, rows, dry_run):
             done = {row_key(r) for r in closed
                     if r.get("result") in ("WIN", "LOSS") or r.get("status") in ("CLOSED_WIN", "CLOSED_LOSS")}
             old_meta = {row_key(r): r.get("meta") for r in closed}
-            rows = [{**r, "meta": keep_existing_context(r.get("meta"), old_meta.get(row_key(r)))}
-                    for r in rows]  # keep the original ctx snapshot of rows already stored
+            for row in rows:
+                previous = old_meta.get(row_key(row)) or {}
+                row["meta"] = keep_existing_context(row.get("meta"), previous)
+                for key in ("origin", "first_seen_at"):
+                    if previous.get(key) is not None:
+                        row["meta"][key] = previous[key]
             todo = list({row_key(r): r for r in rows
                          if row_key(r) not in done}.values())  # no dup keys in one upsert
             for i in range(0, len(todo), 500):
@@ -89,7 +93,7 @@ def backfill_symbols(sb, syms, dry_run=False):
                 if m["status"] not in total or not m.get("is_high_rr"):
                     continue
                 total[m["status"]] += 1
-                rows.append(signal_to_row(m, frames))  # + meta.ctx, same code as live
+                rows.append(signal_to_row(m, frames, origin="historical"))
         sb = _write_symbol(sb, t, rows, dry_run)
         print(f"  {t}: {sum(total.values()) - before} marker(s)")
     return total, missing

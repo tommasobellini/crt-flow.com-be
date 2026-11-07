@@ -134,7 +134,7 @@ class _SB:
 def _db():
     r1 = {**_sig("CLOSED_LOSS"), "id": 1, "meta": {"ctx": {"a": 1}, "ctx_version": 1}}
     r2 = {**_sig("CLOSED_LOSS"), "id": 2,
-          "meta": {"outcome": {"outcome_version": 1, "mae_r": -1, "mfe_r": 0, "bars_held": 1}}}
+          "meta": {"outcome": {"outcome_version": OUTCOME_VERSION, "mae_r": -1, "mfe_r": 0, "bars_held": 1}}}
     return [r1, r2]
 
 
@@ -145,7 +145,7 @@ def test_backfill_idempotent_preserves_meta_and_retries(monkeypatch):
     sb = _SB(db, log)
     st = backfill_outcome.run(sb, dry_run=False, limit=10, batch=10, fetch=lambda s: {"1D": LONG_LOSS},
                               new_client=lambda: (log.__setitem__("reconnects", log.get("reconnects", 0) + 1), sb)[1])
-    assert st["rows"] == 1 and st["written"] == 1  # row 2 skipped (outcome_version 1)
+    assert st["rows"] == 1 and st["written"] == 1  # row 2 already has the current outcome version
     (rid, upd), = log["writes"]
     assert rid == 1 and upd["meta"]["ctx"] == {"a": 1} and upd["meta"]["ctx_version"] == 1
     assert upd["meta"]["outcome"]["mae_r"] == pytest.approx(-1.05)

@@ -14,6 +14,7 @@ import yfinance as yf
 from devils_outcome_resolver import setup_logging, setup_supabase
 from market_data import clean_df, drop_unclosed
 from strategy.sizing import attach_size_factor
+from strategy.gap_fill import RESOLVER_VERSION
 from strategy.devils_cisd_v1 import STRATEGY, find_signals
 
 UNIVERSE = (
@@ -35,6 +36,10 @@ def daily(t: str):
 
 def to_row(s: dict) -> dict:
     closed = s["status"] != "ACTIVE"
+    meta = {"mark_at": s["mark_at"], "paper": True,
+            "resolver_version": RESOLVER_VERSION, "entry_basis": "signal_close"}
+    if s.get("execution") is not None:
+        meta["execution"] = s["execution"]
     return {
         "symbol": s["ticker"], "timeframe": "1D", "direction": s["direction"],
         "devils_marker_price": s["devils_marker_price"], "entry_price": s["entry_price"],
@@ -46,8 +51,7 @@ def to_row(s: dict) -> dict:
         "pattern_at": s["pattern_at"], "strategy": STRATEGY, "is_paper": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         # size_factor is reporting only: the frozen devils_cisd_v1 rules are unchanged
-        "meta": attach_size_factor({"mark_at": s["mark_at"], "paper": True, "resolver_version": 2},
-                                   s["entry_price"], s["stop_loss"]),
+        "meta": attach_size_factor(meta, s["entry_price"], s["stop_loss"]),
     }
 
 

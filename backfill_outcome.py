@@ -1,7 +1,7 @@
 """Fill devils_signals.meta.outcome (mae_r, mfe_r, bars_held) for closed rows.
 
 Run by a human with the service-role key. Only `meta` is updated: existing keys (ctx,
-ctx_version, ...) are kept and `outcome` is added. Rows that already have outcome_version 1
+ctx_version, ...) are kept and `outcome` is added. Rows already at the current outcome version
 are skipped, so the script can be re-run after an interruption. Uses the same candles as
 the scanner (devils_scanner.fetch_devils_frames).
 
@@ -38,7 +38,7 @@ def _retry(fn, state, what):
 
 
 def fetch_rows(state, *, limit, batch, symbols=None):
-    """Closed pure_no_wick rows without meta.outcome v1."""
+    """Closed pure_no_wick rows without the current meta.outcome version."""
     out, start = [], 0
     while len(out) < limit:
         def q(sb, start=start):
@@ -51,7 +51,7 @@ def fetch_rows(state, *, limit, batch, symbols=None):
         if not data:
             break
         out += [r for r in data if not has_outcome(r.get("meta"))]
-        start += batch
+        start += len(data)
     return out[:limit]
 
 

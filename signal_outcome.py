@@ -10,15 +10,16 @@ after the fact; they must never be used as entry filters and never go in meta.ct
     mfe_r  = best gross excursion in favour, in R (>= 0; >= planned R on a win)
 No costs, no capping (gross values). bars_held = bars in the window.
     mae_r_capped   = loss: max(mae_r, -1), or the exit bar's open in R if it opened beyond the
-                     stop (gap); win: mae_r
+                     stop (gap); win: mae_r, excluding adverse moves after a known target fill at open
     mfe_r_pre_exit = MFE excluding the closing bar (0 if the trade closed on the first bar)
-    ambiguous_exit_bar = the closing bar touched both stop and target (order unknown)
+    ambiguous_exit_bar = both touched with an opening price strictly between the two levels
 """
 from __future__ import annotations
 
 from signal_context import pattern_position
+from strategy.gap_fill import exit_metadata, exit_on_bar
 
-OUTCOME_VERSION = 1
+OUTCOME_VERSION = 2
 CLOSED = ("CLOSED_WIN", "CLOSED_LOSS")
 
 
@@ -58,20 +59,21 @@ def _compute(signal, frames):
     result = None
     ambiguous = False
     exit_open = None
+    mae_pre = 0.0
     after = df.iloc[pos + 1:]
     for o, h, l in zip(after["Open"].astype(float), after["High"].astype(float), after["Low"].astype(float)):
         bars += 1
         if long:
             adv, fav = (l - entry) / risk, (h - entry) / risk
-            sl_hit, tp_hit = l <= stop, h >= target
         else:
             adv, fav = (entry - h) / risk, (entry - l) / risk
-            sl_hit, tp_hit = h >= stop, l <= target
         mfe_pre = mfe  # MFE of the bars before this one
+        mae_pre = mae
         mae, mfe = min(mae, adv), max(mfe, fav)
-        if sl_hit or tp_hit:
-            result = "CLOSED_LOSS" if sl_hit else "CLOSED_WIN"
-            ambiguous = bool(sl_hit and tp_hit)
+        ex = exit_on_bar(o, h, l, long=long, entry=entry, stop=stop, target=target)
+        if ex is not None:
+            result = ex[0]
+            ambiguous = exit_metadata(o, h, l, long=long, stop=stop, target=target, exit=ex)["ambiguous_exit_bar"]
             exit_open = o
             break
     if result is None or result != status:
@@ -80,7 +82,9 @@ def _compute(signal, frames):
         gap = exit_open < stop if long else exit_open > stop
         mae_capped = ((exit_open - entry) if long else (entry - exit_open)) / risk if gap else max(mae, -1.0)
     else:
-        mae_capped = mae
+        # A target filled at the open is no longer exposed to that bar's later low/high.
+        target_at_open = exit_open >= target if long else exit_open <= target
+        mae_capped = mae_pre if target_at_open else mae
     return {"mae_r": _r(mae), "mfe_r": _r(mfe), "mae_r_capped": _r(mae_capped),
             "mfe_r_pre_exit": _r(mfe_pre), "ambiguous_exit_bar": ambiguous,
             "outcome_version": OUTCOME_VERSION, "bars_held": bars}

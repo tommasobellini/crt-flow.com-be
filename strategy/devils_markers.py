@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from strategy.gap_fill import RESOLVER_VERSION, exit_on_bar
+from strategy.gap_fill import RESOLVER_VERSION, exit_metadata, exit_on_bar
 import pandas as pd
 
 PIVOT_WINDOW = 3
@@ -148,17 +148,28 @@ def resolve_trade_after_marker(
     df: pd.DataFrame, mark_i: int, direction: Direction, stop: float, target: float,
     entry: float | None = None, planned_r: float | None = None,
 ) -> tuple[Literal["OPEN", "CLOSED_WIN", "CLOSED_LOSS"], float | None]:
-    """(status, r_multiple) on bars after the mark (resolver_version 2, see strategy.gap_fill).
-    Same bar SL+TP -> LOSS (conservative). A bar opening beyond stop/target fills at the open.
-    entry defaults to the mark bar close (the scanner entry)."""
+    """Compatibility wrapper returning (status, R); entries remain theoretical closes."""
+    details = resolve_trade_details_after_marker(df, mark_i, direction, stop, target, entry, planned_r)
+    return details["status"], details["r_multiple"]
+
+
+def resolve_trade_details_after_marker(
+    df: pd.DataFrame, mark_i: int, direction: Direction, stop: float, target: float,
+    entry: float | None = None, planned_r: float | None = None,
+) -> dict:
+    """First exit, including its bar timestamp and simulated fill (never a broker fill)."""
     if entry is None:
         entry = round(_to_f(df.iloc[mark_i]["Close"]), 4)
-    for _, row in df.iloc[mark_i + 1 :].iterrows():
+    for ts, row in df.iloc[mark_i + 1 :].iterrows():
         ex = exit_on_bar(row["Open"], row["High"], row["Low"], long=direction == "BULLISH",
                          entry=entry, stop=stop, target=target, planned_r=planned_r)
         if ex is not None:
-            return ex[0], ex[1]
-    return "OPEN", None
+            stamp = pd.Timestamp(ts)
+            stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+            return {"status": ex[0], "r_multiple": ex[1], "closed_at": stamp.isoformat(),
+                    "execution": exit_metadata(row["Open"], row["High"], row["Low"],
+                                               long=direction == "BULLISH", stop=stop, target=target, exit=ex)}
+    return {"status": "OPEN", "r_multiple": None, "closed_at": None, "execution": None}
 
 
 def trade_outcome_after_marker(
@@ -183,6 +194,7 @@ def _build_signal(
     df: pd.DataFrame,
 ) -> dict:
     ts = df.index[mark_i]
+    trade = resolve_trade_details_after_marker(df, mark_i, direction, stop, target, entry, rr)
     return {
         "ticker": ticker.upper(),
         "timeframe": timeframe,
@@ -200,9 +212,10 @@ def _build_signal(
         "is_cisd_broken": True,
         "cisd_label": "ENTRY",
         "meta_rule": "open_eq_high" if direction == "BEARISH" else "open_eq_low",
-        "trade_outcome": trade_outcome_after_marker(df, mark_i, direction, stop, target),
-        "r_multiple": resolve_trade_after_marker(df, mark_i, direction, stop, target,
-                                                 entry=entry, planned_r=rr)[1],
+        "trade_outcome": trade["status"],
+        "r_multiple": trade["r_multiple"],
+        "closed_at": trade["closed_at"],
+        "execution": trade["execution"],
         "resolver_version": RESOLVER_VERSION,
     }
 

@@ -12,8 +12,10 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-from strategy.gap_fill import RESOLVER_VERSION, exit_on_bar
+from strategy.gap_fill import RESOLVER_VERSION, exit_metadata, exit_on_bar
 from strategy.sizing import attach_size_factor
+from signal_outcome import attach_outcome, compute_trade_outcome
+from signal_context import pattern_position
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
@@ -47,10 +49,9 @@ def setup_supabase() -> Client | None:
     key = (
         os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     )
     if not url or not key:
-        logger.error("Missing Supabase credentials")
+        logger.error("Missing Supabase service-role credentials")
         return None
     return create_client(url, key)
 
@@ -109,22 +110,27 @@ def resolve_outcome(signal: dict[str, Any], df: pd.DataFrame) -> dict[str, Any] 
     if start is None:
         return None
 
-    future = df[df.index > start]
+    future = df.loc[pd.to_datetime(df.index, utc=True) > start.tz_localize("UTC")]
     if future.empty:
         return None
 
     rr = signal.get("rr_ratio")
     for ts, candle in future.iterrows():
-        # Same bar SL+TP -> LOSS; a bar opening beyond stop/target fills at the open (v2)
+        # The opening price is known to precede any intrabar stop/target touch.
         ex = exit_on_bar(candle["Open"], candle["High"], candle["Low"], long=is_long,
                          entry=entry, stop=stop, target=target,
                          planned_r=float(rr) if rr else None)
         if ex is None:
             continue
         status, r, _fill, _gap = ex
-        if status == "CLOSED_LOSS":
-            return _close_payload("LOSS", "SL_HIT", ts, signal, r)
-        return _close_payload("WIN", "TP_HIT", ts, signal, r)
+        result, reason = ("LOSS", "SL_HIT") if status == "CLOSED_LOSS" else ("WIN", "TP_HIT")
+        payload = _close_payload(result, reason, ts, signal, r)
+        payload["meta"]["execution"] = exit_metadata(
+            candle["Open"], candle["High"], candle["Low"], long=is_long, stop=stop, target=target, exit=ex)
+        tf = signal.get("timeframe", "1D")
+        outcome = compute_trade_outcome({**signal, "timeframe": tf, "status": status}, {tf: df})
+        payload["meta"] = attach_outcome(payload["meta"], outcome)
+        return payload
     return None
 
 
@@ -157,21 +163,23 @@ def _close_payload(
     }
 
 
-def load_open(supabase: Client, limit: int = 2000) -> list[dict]:
-    resp = (
-        supabase.table("devils_signals")
-        .select(
-            "id, symbol, timeframe, direction, entry_price, cisd_level, "
-            "stop_loss, target, rr_ratio, pattern_at, created_at, result, status, meta"
-        )
-        .eq("is_active", True)
-        .is_("result", "null")
-        .neq("strategy", "devils_cisd_v1")  # paper rule resolves itself (50-bar time exit)
-        .limit(limit)
-        .execute()
-    )
-    rows = resp.data or []
-    return [r for r in rows if r.get("status") in OPEN_STATUSES or r.get("status") == "ACTIVE"]
+def load_open(supabase: Client, limit: int | None = None) -> list[dict]:
+    """Load all eligible rows before closing any, so pagination cannot skip moved rows."""
+    rows, offset = [], 0
+    while limit is None or len(rows) < limit:
+        count = min(500, limit - len(rows)) if limit is not None else 500
+        data = (supabase.table("devils_signals")
+                .select("id, symbol, timeframe, direction, entry_price, cisd_level, "
+                        "stop_loss, target, rr_ratio, pattern_at, created_at, result, status, meta")
+                .eq("is_active", True).is_("result", "null")
+                .eq("strategy", "pure_no_wick").eq("is_paper", False)
+                .in_("status", list(OPEN_STATUSES)).order("id")
+                .range(offset, offset + count - 1).execute().data or [])
+        if not data:
+            break
+        rows.extend(data)
+        offset += len(data)
+    return rows
 
 
 def resolve_all(supabase: Client, dry_run: bool = False) -> tuple[int, int]:
@@ -195,6 +203,9 @@ def resolve_all(supabase: Client, dry_run: bool = False) -> tuple[int, int]:
         df = cache[key]
         if df is None or df.empty:
             continue
+        if pattern_position(df, sig.get("pattern_at") or sig.get("created_at")) is None:
+            logger.warning("  %s %s: entry bar missing from history; outcome left unresolved", symbol, tf)
+            continue
 
         update = resolve_outcome(sig, df)
         if not update:
@@ -205,7 +216,8 @@ def resolve_all(supabase: Client, dry_run: bool = False) -> tuple[int, int]:
             f"R={update.get('r_multiple')}"
         )
         if not dry_run:
-            supabase.table("devils_signals").update(update).eq("id", sig["id"]).execute()
+            (supabase.table("devils_signals").update(update).eq("id", sig["id"])
+             .eq("is_active", True).is_("result", "null").execute())
         closed += 1
 
     return checked, closed

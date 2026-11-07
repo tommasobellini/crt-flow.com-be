@@ -14,7 +14,7 @@ PAPER ONLY: signals are tagged paper=True and must never be used for real orders
 from __future__ import annotations
 
 import numpy as np
-from strategy.gap_fill import exit_on_bar
+from strategy.gap_fill import exit_metadata, exit_on_bar
 import pandas as pd
 
 STRATEGY = "devils_cisd_v1"
@@ -114,6 +114,17 @@ def find_signals(df: pd.DataFrame, ticker: str) -> list[dict]:
         if risk <= 0 or risk / e < MIN_RISK_PCT:
             continue
         status, k_exit, r = _simulate(H, L, C, ent, dr, e, st, O)
+        execution = None
+        if k_exit is not None:
+            if status == "CLOSED_TIME":
+                execution = {"exit_price": float(C[k_exit]), "exit_gap": False,
+                             "ambiguous_exit_bar": False, "exit_time_precision": "bar"}
+            else:
+                tg = e + RR * risk * dr
+                ex = exit_on_bar(O[k_exit], H[k_exit], L[k_exit], long=dr == 1,
+                                 entry=e, stop=st, target=tg, planned_r=RR)
+                execution = exit_metadata(O[k_exit], H[k_exit], L[k_exit], long=dr == 1,
+                                          stop=st, target=tg, exit=ex)
         busy = k_exit if k_exit is not None else n
         out.append(
             {
@@ -130,6 +141,7 @@ def find_signals(df: pd.DataFrame, ticker: str) -> list[dict]:
                 "status": status,
                 "r_multiple": r,
                 "closed_at": pd.Timestamp(df.index[k_exit]).isoformat() if k_exit is not None else None,
+                "execution": execution,
                 "strategy": STRATEGY,
                 "paper": True,
             }

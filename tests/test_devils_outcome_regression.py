@@ -91,7 +91,7 @@ def test_unresolved_signal_stays_open():
 @pytest.mark.parametrize("freq", ["W-FRI", "MS"])
 @pytest.mark.parametrize("direction", ["BULLISH", "BEARISH"])
 def test_same_htf_candle_is_conservative_loss(freq, direction):
-    bar = _bar(100, 106, 94, 100)
+    bar = _bar(98 if direction == "BULLISH" else 102, 106, 94, 100)
     entry, stop, target = (96.0, 95.0, 100.0) if direction == "BULLISH" else (104.0, 105.0, 100.0)
     out = res.resolve_outcome(_signal(direction, entry, stop, target, 4.0, at="2024-12-01"),
                               _df([bar], start="2025-01-03", freq=freq))

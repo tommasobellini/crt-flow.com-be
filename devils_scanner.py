@@ -24,7 +24,7 @@ from market_data import (
 from strategy.config import YF_PERIOD_1H
 from strategy.gap_fill import RESOLVER_VERSION
 from strategy.sizing import attach_size_factor
-from signal_context import attach_context, compute_signal_context, keep_existing_context
+from signal_context import attach_context, bar_end, compute_signal_context, keep_existing_context
 from signal_outcome import attach_outcome, compute_trade_outcome
 from tv_watchlists import load_watchlist
 from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
@@ -161,7 +161,7 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
     return frames
 
 
-def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
+def signal_to_row(signal: dict, frames: dict | None = None, *, origin: str | None = None) -> dict:
     """frames: the scan frames; when given, meta gets the context snapshot (meta.ctx) and,
     for closed trades, meta.outcome (mae_r/mfe_r, not a filter)."""
     row = {
@@ -184,7 +184,7 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
             else signal.get("rr_ratio") if signal["status"] == "CLOSED_WIN"
             else -1.0 if signal["status"] == "CLOSED_LOSS" else None
         ),
-        "closed_at": None,
+        "closed_at": signal.get("closed_at"),
         "is_active": signal["status"] == "ACTIVE",
         "pattern_at": signal.get("pattern_at"),
         "strategy": "pure_no_wick",
@@ -195,8 +195,16 @@ def signal_to_row(signal: dict, frames: dict | None = None) -> dict:
             "is_high_rr": signal.get("is_high_rr"),
             "strategy": "pure_no_wick",
             "resolver_version": RESOLVER_VERSION,
+            "entry_basis": "signal_close",
+            "origin": origin or ("scanner" if signal["status"] == "ACTIVE" else "reconstructed"),
+            "first_seen_at": datetime.now(timezone.utc).isoformat(),
         },
     }
+    if signal.get("execution") is not None:
+        row["meta"]["execution"] = signal["execution"]
+    if signal.get("pattern_at"):
+        row["meta"]["signal_available_at"] = bar_end(
+            pd.DatetimeIndex([signal["pattern_at"]]), signal["timeframe"])[0].isoformat()
     row["meta"] = attach_size_factor(row["meta"], row.get("entry_price"), row.get("stop_loss"))
     if frames is not None:
         row["meta"] = attach_context(row["meta"], compute_signal_context(signal, frames))
@@ -218,7 +226,8 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
     # Do not overwrite already closed outcomes
     existing = (
         supabase.table("devils_signals")
-        .select("id, result, status, meta")
+        .select("id, result, status, meta, created_at")
+        .eq("strategy", row.get("strategy", "pure_no_wick"))
         .eq("symbol", row["symbol"])
         .eq("timeframe", row["timeframe"])
         .eq("direction", row["direction"])
@@ -235,6 +244,12 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
             return
         # keep the first context snapshot of a re-upserted active signal (sector/earnings must not drift)
         row["meta"] = keep_existing_context(row.get("meta"), prev.get("meta"))
+        for key in ("origin", "first_seen_at"):
+            old_value = (prev.get("meta") or {}).get(key)
+            if old_value is not None:
+                row["meta"][key] = old_value
+        if prev.get("created_at") and not (prev.get("meta") or {}).get("first_seen_at"):
+            row["meta"]["first_seen_at"] = prev["created_at"]
     supabase.table("devils_signals").upsert(
         row, on_conflict="strategy,symbol,timeframe,direction,pattern_at"
     ).execute()
