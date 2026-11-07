@@ -123,13 +123,17 @@ def test_real_one_cent_wicks_are_rejected_at_high_and_low_prices():
     assert _is_open_eq_low(71.36, 71.36 + 1e-10)
 
 
-def test_radar_requires_latest_bar_and_live_observation():
+def test_radar_requires_recent_window_and_live_observation():
     row = signal_to_row(signal())
     clock = datetime(2025, 1, 3, tzinfo=timezone.utc)
-    assert RECENT_CANDLES == 1
+    assert RECENT_CANDLES == 3
     assert source_validation(row, candles()) == "VERIFIED"
     assert radar_validation(row, candles(), 1, now=clock)["radar_reason"] == "OUTSIDE_RECENT_WINDOW"
     assert radar_validation(row, candles(), 3, now=clock)["radar_eligible"] is True
+    for count, eligible in ((3, True), (4, False)):
+        frame = candles().iloc[[0] + [1] * (count - 1)].copy()
+        frame.index = pd.date_range("2025-01-01", periods=count, tz="America/New_York")
+        assert radar_validation(row, frame, 3, now=datetime(2025, 1, 5, tzinfo=timezone.utc))["radar_eligible"] is eligible
     historical = signal_to_row(signal(), origin="historical")
     assert radar_validation(historical, candles(), 3, now=clock)["radar_reason"] == "HISTORICAL_ONLY"
     legacy = {**row, "meta": {}}

@@ -56,8 +56,8 @@ def test_stop_hit_mark_is_not_silently_dropped(direction):
 @pytest.mark.parametrize("direction", ["BULLISH", "BEARISH"])
 def test_open_mark_still_detected(direction):
     df = _series_with_mark(direction, stop_hit_after=False)
-    assert dm.find_devils_markers(df, ticker="TST", timeframe="1D") == []
-    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D", recent_candles=3)
+    assert dm.find_devils_markers(df, ticker="TST", timeframe="1D", recent_candles=1) == []
+    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D")
     assert any(s["direction"] == direction and s["status"] == "ACTIVE" for s in sigs)
 
 

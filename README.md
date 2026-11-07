@@ -6,8 +6,10 @@ https://www.ishares.com/us/products/239710/ishares-russell-2000-etf
 
 ## Devil's Markers outcome integrity
 
-The live radar uses the **last closed candle** per timeframe (4H/1D/1W/1M),
+The live radar uses the **last 3 closed candles** per timeframe (4H/1D/1W/1M),
 regular US sessions and Yahoo split-adjusted prices **without dividend adjustment**.
+The window counts candles, not days: a monthly pattern can be two months old.
+Feed expiry uses the latest available bar, separately from the pattern's position.
 Strategy version 2 requires open == low for a bullish close or open == high for a
 bearish close; the equality tolerance only covers floating-point noise.
 
@@ -19,7 +21,7 @@ ageing out never invents a trade outcome. Historical backfills cannot overwrite 
 simulations. The scheduled scanner skips historical backfills.
 
 ```powershell
-py -3.12 -B devils_scanner.py --recent-candles 1 --skip-backfill
+py -3.12 -B devils_scanner.py --recent-candles 3 --skip-backfill
 ```
 
 Resolver version 3 processes opening fills before intrabar touches. When the open

@@ -21,7 +21,7 @@ from strategy.gap_fill import RESOLVER_VERSION, exit_metadata, exit_on_bar
 import pandas as pd
 
 PIVOT_WINDOW = 3
-RECENT_CANDLES = 1
+RECENT_CANDLES = 3
 MIN_RR = 1.5
 MIN_RISK_PCT = 0.0008
 MAX_RR = 25.0
