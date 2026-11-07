@@ -1,0 +1,27 @@
+name: Swing 4H evening paper
+
+on:
+  schedule:
+    # UTC candidates for 16:25 New York; --scheduled skips the early DST candidate.
+    - cron: "25 20,21 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: swing-4h-paper
+  cancel-in-progress: false
+
+jobs:
+  evening-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Update the separate paper account
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python swing_paper.py --persist --scheduled

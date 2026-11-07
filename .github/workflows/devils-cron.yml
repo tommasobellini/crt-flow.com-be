@@ -39,3 +39,21 @@ jobs:
           python devils_scanner.py --workers 10 --universe sp500_nasdaq --recent-candles 3 --skip-backfill
           python devils_outcome_resolver.py
           python devils_cisd_v1_paper.py  # PAPER ONLY, no orders
+
+  devils-sweep-cisd-paper:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: devils-sweep-cisd-v2-paper
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Record separate 4H paper experiment
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY }}
+        run: python devils_sweep_cisd_paper.py --since 2026-11-07 --persist

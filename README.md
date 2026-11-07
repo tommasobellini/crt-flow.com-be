@@ -6,6 +6,50 @@ https://www.ishares.com/us/products/239710/ishares-russell-2000-etf
 
 ## Devil's Markers outcome integrity
 
+### Experimental 4H sweep -> Devil -> CISD (paper only)
+
+`devils_sweep_cisd_v2` is a separate experiment; Pure No-Wick and frozen v1 rules
+are unchanged. All three events use closed session-aligned 4H bars. Liquidity is
+the previous closed daily session's high/low, available before the 4H bar opens.
+
+Fixed starting rules (no parameter search):
+
+- Strict break of that low/high and a close back inside; dual-sided sweeps are rejected.
+- Freeze the opposite-colour run's CISD level and the sweep extreme at the sweep close.
+- A same-direction exact no-wick marker must open within 0.5 ATR(14) of the swept level.
+- The CISD must close beyond its frozen level within 3 subsequent 4H candles.
+  Marker and CISD may coincide; an entry can only occur after that candle closes.
+- SL is beyond the original sweep extreme by max(0.01, 0.1 ATR); TP is the opposite
+  previous-day level. A new sweep extreme, consumed target, or elapsed window cancels
+  the setup. Risk/entry must be >=0.08%, target distance <=35%, and planned R 1.5..25.
+
+The comparison replays Pure No-Wick, sweep+CISD, and sweep+Devil+CISD on the same
+frozen data with 5 bps per side in fees and configurable additional slippage.
+The latter comparison measures the full nearby-marker gate, including proximity.
+Parameters and costs are registered before data download. The final 20% of calendar
+history is reported separately; pre-split trades still open at that boundary are
+excluded from pre-split metrics. Open trades and data errors are always reported.
+These are independent simulated signals with theoretical close entries, not actual
+fills or portfolio returns. Thirty held-out closures across three tickers is only a
+sample-size check, not statistical proof or permission for automatic promotion.
+
+```powershell
+py -3.12 -B devils_sweep_cisd_research.py
+py -3.12 -B devils_sweep_cisd_paper.py --since 2026-11-07 --dry-run
+py -3.12 -B devils_sweep_cisd_paper.py --stats
+```
+
+Research defaults to the fixed 36-symbol IC-CISD watchlist, writes immutable JSON
+reports/registrations and caches under `.local-backups/`, and never writes Supabase.
+Paper persistence requires `--persist`; its separate scheduled job has an explicit start
+date and imports only entries in the last 3 closed 4H bars. Existing open paper trades
+continue to resolve using their original levels. Source snapshots protect against
+revised candles, inserts ignore duplicates, and closed rows cannot be reopened by a
+rescan. Experimental rows use their own strategy ID and `is_paper=true`, so they do
+not enter the production radar or its Pure No-Wick performance statistics.
+
+### Pure No-Wick
+
 The live radar uses the **last 3 closed candles** per timeframe (4H/1D/1W/1M),
 regular US sessions and Yahoo split-adjusted prices **without dividend adjustment**.
 The window counts candles, not days: a monthly pattern can be two months old.
