@@ -17,6 +17,7 @@ import time
 from collections import defaultdict
 
 from devils_scanner import fetch_devils_frames, setup_supabase
+from devils_signal_validation import PRICE_BASIS
 from signal_context import pattern_position
 from signal_outcome import attach_outcome, compute_trade_outcome
 from strategy.devils_markers import resolve_trade_details_after_marker
@@ -95,10 +96,13 @@ def run(sb, *, dry_run, limit, batch, symbols=None, fetch=fetch_devils_frames,
     for r in rows:
         by_sym[r["symbol"]].append(r)
     stats = {"rows": len(rows), "recomputed": 0, "changed": 0, "no_bars": 0, "mismatch": 0,
-             "written": 0, "sum_r_old": 0.0, "sum_r_new": 0.0}
+             "written": 0, "sum_r_old": 0.0, "sum_r_new": 0.0, "unsupported_basis": 0}
     for sym in sorted(by_sym):
         frames = fetch(sym) or {}
         for r in by_sym[sym]:
+            if (r.get("meta") or {}).get("price_basis") != PRICE_BASIS:
+                stats["unsupported_basis"] += 1
+                continue
             res = recompute_details(r, frames)
             if res is None:
                 stats["no_bars"] += 1

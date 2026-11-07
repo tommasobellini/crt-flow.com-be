@@ -21,13 +21,14 @@ from strategy.gap_fill import RESOLVER_VERSION, exit_metadata, exit_on_bar
 import pandas as pd
 
 PIVOT_WINDOW = 3
-RECENT_CANDLES = 3
+RECENT_CANDLES = 1
 MIN_RR = 1.5
 MIN_RISK_PCT = 0.0008
 MAX_RR = 25.0
 MAX_TARGET_MOVE_PCT = 0.35
-# Float tolerance for open==high / open==low (Yahoo rarely exact)
-PRICE_EQ_TOL = 1e-4  # relative 0.01% (Strategist decision, see bt_ab)
+# Numerical noise only: a real wick must not become a Pine-style exact-equality mark.
+PRICE_EQ_TOL = 1e-9
+STRATEGY_VERSION = 2
 
 Direction = Literal["BULLISH", "BEARISH"]
 Status = Literal["ACTIVE", "INVALIDATED", "CLOSED_WIN", "CLOSED_LOSS"]
@@ -217,6 +218,7 @@ def _build_signal(
         "closed_at": trade["closed_at"],
         "execution": trade["execution"],
         "resolver_version": RESOLVER_VERSION,
+        "pattern_candle": {k.lower(): float(df.iloc[mark_i][k]) for k in ("Open", "High", "Low", "Close")},
     }
 
 

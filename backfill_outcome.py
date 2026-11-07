@@ -17,6 +17,7 @@ import time
 from collections import defaultdict
 
 from devils_scanner import fetch_devils_frames, setup_supabase
+from devils_signal_validation import PRICE_BASIS
 from signal_outcome import CLOSED, attach_outcome, compute_trade_outcome, has_outcome
 
 COLS = "id,symbol,timeframe,direction,entry_price,stop_loss,target,pattern_at,status,meta"
@@ -61,10 +62,13 @@ def run(sb, *, dry_run, limit, batch, symbols=None, fetch=fetch_devils_frames, n
     by_sym = defaultdict(list)
     for r in rows:
         by_sym[r["symbol"]].append(r)
-    stats = {"rows": len(rows), "with_outcome": 0, "no_outcome": 0, "written": 0}
+    stats = {"rows": len(rows), "with_outcome": 0, "no_outcome": 0, "written": 0, "unsupported_basis": 0}
     for sym in sorted(by_sym):
         frames = fetch(sym) or {}
         for r in by_sym[sym]:
+            if (r.get("meta") or {}).get("price_basis") != PRICE_BASIS:
+                stats["unsupported_basis"] += 1
+                continue
             oc = compute_trade_outcome(r, frames)
             if oc is None:  # pattern bar outside history, or bars disagree with stored status
                 stats["no_outcome"] += 1

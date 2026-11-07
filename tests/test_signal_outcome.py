@@ -132,7 +132,8 @@ class _SB:
 
 
 def _db():
-    r1 = {**_sig("CLOSED_LOSS"), "id": 1, "meta": {"ctx": {"a": 1}, "ctx_version": 1}}
+    r1 = {**_sig("CLOSED_LOSS"), "id": 1, "meta": {"ctx": {"a": 1}, "ctx_version": 1,
+          "price_basis": "split_adjusted_no_dividends"}}
     r2 = {**_sig("CLOSED_LOSS"), "id": 2,
           "meta": {"outcome": {"outcome_version": OUTCOME_VERSION, "mae_r": -1, "mfe_r": 0, "bars_held": 1}}}
     return [r1, r2]
@@ -152,7 +153,7 @@ def test_backfill_idempotent_preserves_meta_and_retries(monkeypatch):
     # dropped connection on the next write -> reconnect + retry
     log.clear()
     log["fail"] = 1
-    db[0]["meta"] = {"ctx": {"a": 1}}
+    db[0]["meta"] = {"ctx": {"a": 1}, "price_basis": "split_adjusted_no_dividends"}
     st = backfill_outcome.run(sb, dry_run=False, limit=10, batch=10, fetch=lambda s: {"1D": LONG_LOSS},
                               new_client=lambda: (log.__setitem__("reconnects", 1), sb)[1])
     assert log.get("reconnects") == 1 and st["written"] == 1

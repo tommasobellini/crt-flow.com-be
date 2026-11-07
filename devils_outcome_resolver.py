@@ -15,7 +15,8 @@ from typing import Any
 from strategy.gap_fill import RESOLVER_VERSION, exit_metadata, exit_on_bar
 from strategy.sizing import attach_size_factor
 from signal_outcome import attach_outcome, compute_trade_outcome
-from signal_context import pattern_position
+from signal_context import bar_end, pattern_position
+from devils_signal_validation import source_validation
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
@@ -75,13 +76,13 @@ def bars_for_tf(symbol: str, timeframe: str) -> pd.DataFrame | None:
             logger.info(f"  {symbol} 7H: timeframe removed, skipping")
             return None
         if tf == "4H":
-            raw = yf.Ticker(symbol).history(period="730d", interval="1h", auto_adjust=True)
+            raw = yf.Ticker(symbol).history(period="730d", interval="1h", auto_adjust=False)
             df = clean_df(raw.dropna() if raw is not None else None)
             if df is None or df.empty:
                 return None
             return resample_to_4h(df)  # session-aligned, closed bars only
 
-        raw = yf.Ticker(symbol).history(period="5y", interval="1d", auto_adjust=True)
+        raw = yf.Ticker(symbol).history(period="5y", interval="1d", auto_adjust=False)
         df = clean_df(raw.dropna() if raw is not None else None)
         if df is None or df.empty:
             return None
@@ -132,6 +133,41 @@ def resolve_outcome(signal: dict[str, Any], df: pd.DataFrame) -> dict[str, Any] 
         payload["meta"] = attach_outcome(payload["meta"], outcome)
         return payload
     return None
+
+
+def resolve_outcome_with_daily(signal: dict, df: pd.DataFrame,
+                               daily: pd.DataFrame | None) -> dict | None:
+    """Resolve weekly/monthly trades after their entry close, including the forming HTF period."""
+    tf = str(signal.get("timeframe") or "1W").upper()
+    if tf not in ("1W", "1M") or daily is None or daily.empty:
+        return resolve_outcome(signal, df)
+    available = bar_end(pd.DatetimeIndex([signal["pattern_at"]]), tf)[0]
+    # Exclude every daily bar that belongs to the signal's still-forming entry period.
+    future = daily.loc[bar_end(daily.index, "1D") > available].copy()
+    if future.empty:
+        return None
+    future.index = pd.to_datetime(future.index, utc=True)
+    entry = float(signal.get("entry_price") or signal.get("cisd_level") or 0)
+    if entry <= 0:
+        return None
+    # An entry event anchors the existing excursion calculation; it is never a held bar
+    # and is never persisted as a market candle. Only subsequent daily bars can cause exits.
+    anchor = pd.DataFrame({k: [entry] for k in ("Open", "High", "Low", "Close")},
+                          index=pd.DatetimeIndex([available]))
+    replay = pd.concat([anchor, future])
+    view = {**signal, "timeframe": "1D", "pattern_at": available.isoformat()}
+    update = resolve_outcome(view, replay)
+    if update:
+        live_seen = update["meta"].get("first_live_seen_at")
+        if live_seen and bar_end(pd.DatetimeIndex([update["closed_at"]]), "1D")[0] < pd.Timestamp(live_seen):
+            update["meta"].pop("first_live_seen_at", None)
+            update["meta"]["origin"] = "reconstructed"
+        update["meta"]["radar_eligible"] = False
+        update["meta"]["radar_reason"] = "TRADE_CLOSED"
+        update["meta"]["execution"]["resolution_timeframe"] = "1D"
+        if update["meta"].get("outcome"):
+            update["meta"]["outcome"]["resolution_timeframe"] = "1D"
+    return update
 
 
 def _close_payload(
@@ -206,8 +242,18 @@ def resolve_all(supabase: Client, dry_run: bool = False) -> tuple[int, int]:
         if pattern_position(df, sig.get("pattern_at") or sig.get("created_at")) is None:
             logger.warning("  %s %s: entry bar missing from history; outcome left unresolved", symbol, tf)
             continue
+        source_state = source_validation(sig, df)
+        if source_state != "VERIFIED":
+            logger.warning("  %s %s: %s; outcome left unresolved", symbol, tf, source_state)
+            continue
 
-        update = resolve_outcome(sig, df)
+        if tf in ("1W", "1M"):
+            daily_key = (symbol, "1D")
+            if daily_key not in cache:
+                cache[daily_key] = bars_for_tf(symbol, "1D")
+            update = resolve_outcome_with_daily(sig, df, cache[daily_key])
+        else:
+            update = resolve_outcome(sig, df)
         if not update:
             continue
 

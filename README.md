@@ -6,10 +6,28 @@ https://www.ishares.com/us/products/239710/ishares-russell-2000-etf
 
 ## Devil's Markers outcome integrity
 
+The live radar uses the **last closed candle** per timeframe (4H/1D/1W/1M),
+regular US sessions and Yahoo split-adjusted prices **without dividend adjustment**.
+Strategy version 2 requires open == low for a bullish close or open == high for a
+bearish close; the equality tolerance only covers floating-point noise.
+
+Each new signal saves its source OHLC, price basis, first live observation and radar
+validation. Rescans hide revised candles, historical-only imports and patterns outside
+the recent window. Stalled feeds expire (7 days for 4H/daily, 14 for weekly, 45 for
+monthly). Radar eligibility is separate from a simulated trade's open/closed state:
+ageing out never invents a trade outcome. Historical backfills cannot overwrite saved
+simulations. The scheduled scanner skips historical backfills.
+
+```powershell
+py -3.12 -B devils_scanner.py --recent-candles 1 --skip-backfill
+```
+
 Resolver version 3 processes opening fills before intrabar touches. When the open
 is strictly between SL and TP and both are touched, the result remains a
-conservative loss and `meta.execution.ambiguous_exit_bar` is true. A weekly/monthly
-intrabar drill-down is not implemented.
+conservative loss and `meta.execution.ambiguous_exit_bar` is true. Weekly/monthly
+trades use closed daily bars after the signal close, including the next forming
+week/month. `meta.execution.resolution_timeframe` and the outcome's matching field
+identify daily resolution; `bars_held` then counts daily bars.
 
 New closed rows include `closed_at` (the exit **bar label**, not a tick timestamp),
 `meta.execution.exit_price` and the versioned outcome excursions. Entries remain
@@ -32,6 +50,8 @@ The same command without `--dry-run` writes the repaired R, fill, exit bar time 
 excursions. `--repair-outcomes` explicitly permits changed WIN/LOSS labels; without
 it, those rows are reported as mismatches. A missing entry bar leaves a row untouched.
 This requires the service-role credential and existing historical market data.
+Repair tools skip rows without the current documented price basis: legacy adjusted
+levels cannot be safely replayed against today's non-dividend-adjusted candles.
 
 Offline regression checks, from this repository's root:
 

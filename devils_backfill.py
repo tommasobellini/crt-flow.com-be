@@ -2,8 +2,8 @@
 One-off history recalculation for pure Devil's Markers (run AFTER the migration).
 
 Re-scans the full history of each symbol/timeframe, so markers that were never
-saved (losses) are recorded with their real outcome. Existing rows are upserted
-on the new unique key (strategy, symbol, timeframe, direction, pattern_at).
+saved (losses) are recorded with their real outcome. Existing rows are preserved:
+historical reconstruction must never reprice a saved live or closed simulation.
 
     python devils_backfill.py --dry-run
     python devils_backfill.py --symbol AAPL
@@ -17,7 +17,6 @@ import pandas as pd
 
 from devils_scanner import TIMEFRAMES, fetch_devils_frames, get_universe, signal_to_row
 from devils_outcome_resolver import setup_logging, setup_supabase
-from signal_context import keep_existing_context
 from strategy.devils_markers import find_devils_markers
 
 
@@ -43,15 +42,7 @@ def _write_symbol(sb, symbol, rows, dry_run):
                 sb.table("devils_signals").select("timeframe,direction,pattern_at,result,status,meta")
                 .eq("strategy", "pure_no_wick").eq("symbol", symbol).execute().data or []
             )
-            done = {row_key(r) for r in closed
-                    if r.get("result") in ("WIN", "LOSS") or r.get("status") in ("CLOSED_WIN", "CLOSED_LOSS")}
-            old_meta = {row_key(r): r.get("meta") for r in closed}
-            for row in rows:
-                previous = old_meta.get(row_key(row)) or {}
-                row["meta"] = keep_existing_context(row.get("meta"), previous)
-                for key in ("origin", "first_seen_at"):
-                    if previous.get(key) is not None:
-                        row["meta"][key] = previous[key]
+            done = {row_key(r) for r in closed}
             todo = list({row_key(r): r for r in rows
                          if row_key(r) not in done}.values())  # no dup keys in one upsert
             for i in range(0, len(todo), 500):

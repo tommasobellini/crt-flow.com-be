@@ -105,12 +105,12 @@ def test_invalidated_when_price_crosses_mark():
     rows[i + 1]["Close"] = 110.5
 
     df = _make_df(rows)
-    active = detect_active_devils_marker(df, ticker="TEST", timeframe="1D")
+    active = detect_active_devils_marker(df, ticker="TEST", timeframe="1D", recent_candles=3)
     # Mark at 22 is invalidated by cross; no other valid mark
     assert active is None
 
     all_m = find_devils_markers(
-        df, ticker="TEST", timeframe="1D", include_invalidated=True
+        df, ticker="TEST", timeframe="1D", include_invalidated=True, recent_candles=3
     )
     bear = [m for m in all_m if m["direction"] == "BEARISH"]
     assert bear
@@ -167,6 +167,6 @@ def test_marker_already_won_is_not_reported_as_active():
     # next bar reaches the target (swing low 104) without touching the stop
     rows[24].update({"Open": 107.0, "High": 107.5, "Low": 103.5, "Close": 104.0})
     df = _make_df(rows)
-    assert detect_active_devils_marker(df, ticker="TEST", timeframe="1D") is None
-    markers = find_devils_markers(df, ticker="TEST", timeframe="1D")
+    assert detect_active_devils_marker(df, ticker="TEST", timeframe="1D", recent_candles=3) is None
+    markers = find_devils_markers(df, ticker="TEST", timeframe="1D", recent_candles=3)
     assert any(m["trade_outcome"] == "CLOSED_WIN" for m in markers)

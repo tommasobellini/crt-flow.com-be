@@ -230,7 +230,8 @@ def test_backfill_context_dry_run_never_writes_and_live_writes_only_meta(monkeyp
     signal_context._DEFAULT = MarketCache(history=lambda *a: None, info=lambda s: {}, earnings=lambda s: None)
     try:
         sig = _signal(FULL, 350, "1D")
-        row = {"id": 1, "symbol": "TEST", "status": "CLOSED_LOSS", "meta": {"strategy": "pure_no_wick"}, **sig}
+        row = {"id": 1, "symbol": "TEST", "status": "CLOSED_LOSS", "meta": {
+            "strategy": "pure_no_wick", "price_basis": "split_adjusted_no_dividends"}, **sig}
         sb = _FakeSB([row])
         st = backfill_context.run(sb, dry_run=True, limit=10, batch=5, fetch=lambda s: _frames(FULL, None))
         assert st["with_ctx"] == 1 and sb.updates == []
@@ -263,10 +264,13 @@ def test_reupsert_keeps_original_ctx_snapshot():
     from devils_scanner import upsert_signal
     from signal_context import keep_existing_context
     old_ctx = {"sector": "Technology", "earnings_within_5d": False}
+    source = {"strategy_version": 2, "price_basis": "split_adjusted_no_dividends",
+              "pattern_candle": {"open": 98, "high": 101, "low": 98, "close": 100}}
     new = {"symbol": "T", "timeframe": "1D", "direction": "BULLISH", "pattern_at": "x",
-           "meta": {"strategy": "pure_no_wick", "ctx": {"sector": "Other"}, "ctx_version": CTX_VERSION}}
+           "status": "ACTIVE",
+           "meta": {**source, "strategy": "pure_no_wick", "ctx": {"sector": "Other"}, "ctx_version": CTX_VERSION}}
     sb = _UpsertSB([{"id": 1, "result": None, "status": "ACTIVE",
-                     "meta": {"ctx": old_ctx, "ctx_version": CTX_VERSION}}])
+                     "meta": {**source, "ctx": old_ctx, "ctx_version": CTX_VERSION}}])
     upsert_signal(sb, dict(new), dry_run=False)
     assert sb.upserts[0]["meta"]["ctx"] == old_ctx
     # new row, old version or missing ctx -> freshly computed ctx is used

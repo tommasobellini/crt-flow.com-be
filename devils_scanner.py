@@ -25,9 +25,13 @@ from strategy.config import YF_PERIOD_1H
 from strategy.gap_fill import RESOLVER_VERSION
 from strategy.sizing import attach_size_factor
 from signal_context import attach_context, bar_end, compute_signal_context, keep_existing_context
+from devils_signal_validation import PRICE_BASIS, radar_validation, same_candle, source_validation
+from devils_outcome_resolver import resolve_outcome_with_daily
 from signal_outcome import attach_outcome, compute_trade_outcome
 from tv_watchlists import load_watchlist
-from strategy.devils_markers import TfLabel, closed_devils_markers, detect_active_devils_marker
+from strategy.devils_markers import (
+    RECENT_CANDLES, STRATEGY_VERSION, TfLabel, closed_devils_markers, detect_active_devils_marker,
+)
 
 # 7H removed: not a session-aligned timeframe (no TradingView equivalent).
 TIMEFRAMES: list[TfLabel] = ["4H", "1D", "1W", "1M"]
@@ -122,7 +126,8 @@ def get_universe(supabase=None) -> list[str]:
 
 def _history(stock: yf.Ticker, *, period: str, interval: str):
     try:
-        raw = stock.history(period=period, interval=interval, auto_adjust=True)
+        # Match the chart's price basis. Dividend-adjusted historical prices drift after payouts.
+        raw = stock.history(period=period, interval=interval, auto_adjust=False)
         cleaned = clean_df(raw.dropna() if raw is not None else None)
         if cleaned is None or cleaned.empty:
             return None
@@ -161,7 +166,8 @@ def fetch_devils_frames(ticker: str) -> dict[TfLabel, object]:
     return frames
 
 
-def signal_to_row(signal: dict, frames: dict | None = None, *, origin: str | None = None) -> dict:
+def signal_to_row(signal: dict, frames: dict | None = None, *, origin: str | None = None,
+                  recent_candles: int = RECENT_CANDLES) -> dict:
     """frames: the scan frames; when given, meta gets the context snapshot (meta.ctx) and,
     for closed trades, meta.outcome (mae_r/mfe_r, not a filter)."""
     row = {
@@ -198,8 +204,18 @@ def signal_to_row(signal: dict, frames: dict | None = None, *, origin: str | Non
             "entry_basis": "signal_close",
             "origin": origin or ("scanner" if signal["status"] == "ACTIVE" else "reconstructed"),
             "first_seen_at": datetime.now(timezone.utc).isoformat(),
+            "strategy_version": STRATEGY_VERSION,
+            "price_basis": PRICE_BASIS,
+            "provider": "yahoo",
+            "session": "US_RTH",
+            "pattern_candle": signal.get("pattern_candle"),
+            "radar_eligible": False,
         },
     }
+    if row["meta"]["origin"] == "scanner" and signal["status"] == "ACTIVE":
+        row["meta"]["first_live_seen_at"] = row["meta"]["first_seen_at"]
+        if frames is not None:
+            row["meta"].update(radar_validation(row, frames.get(signal["timeframe"]), recent_candles))
     if signal.get("execution") is not None:
         row["meta"]["execution"] = signal["execution"]
     if signal.get("pattern_at"):
@@ -226,7 +242,7 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
     # Do not overwrite already closed outcomes
     existing = (
         supabase.table("devils_signals")
-        .select("id, result, status, meta, created_at")
+        .select("id, result, status, meta, created_at, entry_price, stop_loss, target, rr_ratio")
         .eq("strategy", row.get("strategy", "pure_no_wick"))
         .eq("symbol", row["symbol"])
         .eq("timeframe", row["timeframe"])
@@ -242,17 +258,55 @@ def upsert_signal(supabase, row: dict, *, dry_run: bool) -> None:
             "CLOSED_LOSS",
         ):
             return
+        previous_meta = prev.get("meta") or {}
+        snapshot = previous_meta.get("pattern_candle")
+        verified_basis = (previous_meta.get("price_basis") == PRICE_BASIS
+                          and previous_meta.get("strategy_version") == STRATEGY_VERSION and snapshot)
+        if not verified_basis or not same_candle(snapshot, row["meta"].get("pattern_candle")):
+            reason = "SOURCE_CANDLE_REVISED" if verified_basis else "UNVERIFIED_PRICE_BASIS"
+            meta = {**previous_meta, "radar_eligible": False, "radar_reason": reason,
+                    "radar_checked_at": datetime.now(timezone.utc).isoformat()}
+            (supabase.table("devils_signals").update({"meta": meta}).eq("id", prev["id"])
+             .eq("is_active", True).is_("result", "null").execute())
+            return
+        if row.get("status") != "ACTIVE":
+            # Only the resolver may close an existing trade, using its original frozen levels.
+            return
         # keep the first context snapshot of a re-upserted active signal (sector/earnings must not drift)
         row["meta"] = keep_existing_context(row.get("meta"), prev.get("meta"))
-        for key in ("origin", "first_seen_at"):
+        for key in ("origin", "first_seen_at", "first_live_seen_at"):
             old_value = (prev.get("meta") or {}).get(key)
             if old_value is not None:
                 row["meta"][key] = old_value
         if prev.get("created_at") and not (prev.get("meta") or {}).get("first_seen_at"):
             row["meta"]["first_seen_at"] = prev["created_at"]
+        # A rescan must not silently change the original entry/SL/TP of an open simulation.
+        for key in ("entry_price", "stop_loss", "target", "rr_ratio"):
+            if prev.get(key) is not None:
+                row[key] = prev[key]
     supabase.table("devils_signals").upsert(
         row, on_conflict="strategy,symbol,timeframe,direction,pattern_at"
     ).execute()
+
+
+def reconcile_radar(supabase, ticker: str, frames: dict, *, recent_candles: int, dry_run: bool) -> None:
+    if dry_run:
+        return
+    rows = (supabase.table("devils_signals")
+            .select("id, timeframe, direction, pattern_at, meta, entry_price, stop_loss, target, rr_ratio")
+            .eq("strategy", "pure_no_wick").eq("is_paper", False).eq("symbol", ticker)
+            .eq("is_active", True).is_("result", "null").execute().data or [])
+    for row in rows:
+        check = radar_validation(row, frames.get(row["timeframe"]), recent_candles)
+        if row["timeframe"] in ("1W", "1M") and source_validation(row, frames.get(row["timeframe"])) == "VERIFIED":
+            closed = resolve_outcome_with_daily(row, frames[row["timeframe"]], frames.get("1D"))
+            if closed:
+                (supabase.table("devils_signals").update(closed).eq("id", row["id"])
+                 .eq("is_active", True).is_("result", "null").execute())
+                continue
+        meta = {**(row.get("meta") or {}), **check}
+        (supabase.table("devils_signals").update({"meta": meta}).eq("id", row["id"])
+         .eq("is_active", True).is_("result", "null").execute())
 
 
 def scan_ticker(
@@ -261,9 +315,12 @@ def scan_ticker(
     supabase=None,
     dry_run: bool = False,
     persist: bool = True,
+    recent_candles: int = RECENT_CANDLES,
 ) -> list[dict]:
     frames = fetch_devils_frames(ticker)
     results: list[dict] = []
+    if persist:
+        reconcile_radar(supabase, ticker, frames, recent_candles=recent_candles, dry_run=dry_run)
 
     for tf in TIMEFRAMES:
         df = frames.get(tf)
@@ -271,16 +328,25 @@ def scan_ticker(
             continue
         if persist:
             # Trades that already closed between scans are real outcomes: record them.
-            for closed in closed_devils_markers(df, ticker=ticker, timeframe=tf):
-                upsert_signal(supabase, signal_to_row(closed, frames), dry_run=dry_run)
-        sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf)
+            for closed in closed_devils_markers(df, ticker=ticker, timeframe=tf, recent_candles=max(3, recent_candles)):
+                upsert_signal(supabase, signal_to_row(closed, frames, recent_candles=recent_candles), dry_run=dry_run)
+        sig = detect_active_devils_marker(df, ticker=ticker, timeframe=tf, recent_candles=recent_candles)
         if sig and not sig.get("is_high_rr"):  # same RR >= 1.5 filter as closed markers
             sig = None
         if sig is None:
             continue
+        if tf in ("1W", "1M"):
+            closed = resolve_outcome_with_daily(sig, df, frames.get("1D"))
+            if closed:
+                if persist:
+                    details = {**sig, **closed, "execution": closed["meta"]["execution"]}
+                    row = signal_to_row(details, frames, origin="reconstructed", recent_candles=recent_candles)
+                    row["meta"].update({k: closed["meta"][k] for k in ("execution", "outcome") if k in closed["meta"]})
+                    upsert_signal(supabase, row, dry_run=dry_run)
+                continue
         results.append(sig)
         if persist:
-            upsert_signal(supabase, signal_to_row(sig, frames), dry_run=dry_run)
+            upsert_signal(supabase, signal_to_row(sig, frames, recent_candles=recent_candles), dry_run=dry_run)
 
     return results
 
@@ -291,6 +357,8 @@ def parse_args():
     p.add_argument("--workers", type=int, default=10)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-persist", action="store_true")
+    p.add_argument("--recent-candles", type=int, choices=[1, 3], default=RECENT_CANDLES)
+    p.add_argument("--skip-backfill", action="store_true", help="scan current bars without historical backfill")
     p.add_argument(
         "--universe",
         choices=["sp500_nasdaq", "watchlist"],
@@ -358,7 +426,7 @@ def main():
         # also syncs devils_watchlist (favourites filter in the web app) when persisting
         tickers = get_universe(setup_supabase() if not args.no_persist and not args.dry_run else None)
 
-    if not args.symbol and args.universe != "watchlist" and not args.no_persist and not args.dry_run:
+    if not args.skip_backfill and not args.symbol and args.universe != "watchlist" and not args.no_persist and not args.dry_run:
         backfill_new_watchlist_symbols()
 
     persist = not args.no_persist
@@ -375,7 +443,7 @@ def main():
     def _job(sym: str) -> tuple[str, list[dict], str | None]:
         try:
             sigs = scan_ticker(
-                sym, supabase=supabase, dry_run=dry_run, persist=persist
+                sym, supabase=supabase, dry_run=dry_run, persist=persist, recent_candles=args.recent_candles
             )
             return sym, sigs, None
         except Exception as exc:

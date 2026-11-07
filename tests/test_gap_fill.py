@@ -119,7 +119,7 @@ def test_backfill_idempotent_and_dry_run():
     base = {"symbol": "TST", "timeframe": "1D", "direction": "BULLISH", "entry_price": 100,
             "stop_loss": 98, "target": 106, "rr_ratio": 3.0, "pattern_at": "2025-01-01T00:00:00+00:00",
             "status": "CLOSED_LOSS", "r_multiple": -1.0}
-    rows = [{**base, "id": 1, "meta": {"ctx": {}}},
+    rows = [{**base, "id": 1, "meta": {"ctx": {}, "price_basis": "split_adjusted_no_dividends"}},
             {**base, "id": 2, "meta": {"resolver_version": RESOLVER_VERSION}}]
     sb = _FakeSB(rows)
     st = bf.run(sb, dry_run=True, limit=10, batch=10, fetch=lambda s: {"1D": df}, new_client=lambda: sb)
@@ -137,7 +137,8 @@ def test_backfill_label_repair_requires_explicit_flag():
     row = {"id": 1, "symbol": "TST", "timeframe": "1D", "direction": "BULLISH",
            "entry_price": 100, "stop_loss": 98, "target": 106, "rr_ratio": 3,
            "pattern_at": "2025-01-01", "status": "CLOSED_LOSS", "r_multiple": -1,
-           "meta": {"ctx": {"saved": True}, "outcome": {"outcome_version": 1}}}
+           "meta": {"ctx": {"saved": True}, "outcome": {"outcome_version": 1},
+                    "price_basis": "split_adjusted_no_dividends"}}
     sb = _FakeSB([row])
     args = dict(dry_run=False, limit=10, batch=10, fetch=lambda s: {"1D": df}, new_client=lambda: sb)
     assert bf.run(sb, **args)["mismatch"] == 1 and sb.log == []

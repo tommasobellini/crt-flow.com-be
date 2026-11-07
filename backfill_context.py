@@ -15,6 +15,7 @@ import json
 from collections import defaultdict
 
 from devils_scanner import fetch_devils_frames, setup_supabase
+from devils_signal_validation import PRICE_BASIS
 from signal_context import CTX_VERSION, attach_context, compute_signal_context
 
 COLS = "id,symbol,timeframe,direction,entry_price,stop_loss,target,devils_marker_price,pattern_at,status,meta"
@@ -43,10 +44,13 @@ def run(sb, *, dry_run, limit, batch, symbols=None, include_open=False, fetch=fe
     by_sym = defaultdict(list)
     for r in rows:
         by_sym[r["symbol"]].append(r)
-    stats = {"rows": len(rows), "with_ctx": 0, "no_ctx": 0, "written": 0}
+    stats = {"rows": len(rows), "with_ctx": 0, "no_ctx": 0, "written": 0, "unsupported_basis": 0}
     for sym in sorted(by_sym):
         frames = fetch(sym) or {}
         for r in by_sym[sym]:
+            if (r.get("meta") or {}).get("price_basis") != PRICE_BASIS:
+                stats["unsupported_basis"] += 1
+                continue
             ctx = compute_signal_context(r, frames)
             if ctx is None:  # pattern bar outside the downloaded history (e.g. 4H older than 730d)
                 stats["no_ctx"] += 1

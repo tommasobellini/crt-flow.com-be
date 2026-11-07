@@ -43,9 +43,9 @@ def test_stop_hit_mark_is_not_silently_dropped(direction):
     """A mark whose stop was hit must be emitted (as CLOSED_LOSS / -1R or resolvable to a loss),
     not discarded — otherwise losses never reach the stats."""
     df = _series_with_mark(direction, stop_hit_after=True)
-    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D")
+    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D", recent_candles=3)
     mark = [s for s in sigs if s["direction"] == direction]
-    assert mark, "stop-hit mark dropped by scanner default (survivorship bias)"
+    assert mark, "stop-hit mark dropped from the requested reconstruction window (survivorship bias)"
     s = mark[0]
     if s["status"] == "CLOSED_LOSS":
         return
@@ -56,7 +56,8 @@ def test_stop_hit_mark_is_not_silently_dropped(direction):
 @pytest.mark.parametrize("direction", ["BULLISH", "BEARISH"])
 def test_open_mark_still_detected(direction):
     df = _series_with_mark(direction, stop_hit_after=False)
-    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D")
+    assert dm.find_devils_markers(df, ticker="TST", timeframe="1D") == []
+    sigs = dm.find_devils_markers(df, ticker="TST", timeframe="1D", recent_candles=3)
     assert any(s["direction"] == direction and s["status"] == "ACTIVE" for s in sigs)
 
 
